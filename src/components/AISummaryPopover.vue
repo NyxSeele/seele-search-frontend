@@ -13,8 +13,8 @@
           <div class="popover-content">
             <!-- Loading -->
             <div v-if="loading" class="loading-state">
-              <div class="loading-spinner"></div>
-              <p>AI正在分析热搜数据...</p>
+              <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+              <p>加载中...</p>
             </div>
 
             <!-- Error -->
@@ -27,7 +27,7 @@
             <div v-else-if="summary" class="summary-content">
               <!-- 全局总结 -->
               <div class="summary-section">
-                <h4 class="section-title">📊 全局分析</h4>
+                <h4 class="section-title">全局分析</h4>
                 <p class="summary-text">{{ summary.summary }}</p>
               </div>
 
@@ -36,7 +36,7 @@
                 v-if="summary.coreTopics && summary.coreTopics.length > 0"
                 class="summary-section"
               >
-                <h4 class="section-title">🔥 核心话题</h4>
+                <h4 class="section-title">核心话题</h4>
                 <div class="topics-list">
                   <div
                     v-for="(topic, index) in summary.coreTopics.slice(0, 3)"
@@ -56,7 +56,7 @@
                 v-if="summary.crossPlatformInsights && summary.crossPlatformInsights.length > 0"
                 class="summary-section"
               >
-                <h4 class="section-title">💡 跨平台洞察</h4>
+                <h4 class="section-title">跨平台洞察</h4>
                 <ul class="insights-list">
                   <li
                     v-for="(insight, index) in summary.crossPlatformInsights.slice(0, 3)"
@@ -170,9 +170,10 @@ watch(
 }
 
 .popover-container {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 20px;
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
+  border: none;
+  border-radius: 24px;
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   display: flex;
@@ -214,6 +215,7 @@ watch(
   padding: 24px;
   flex: 1;
   min-height: 200px;
+  background: transparent;
 }
 
 .popover-content::-webkit-scrollbar {
@@ -241,6 +243,13 @@ watch(
   justify-content: center;
   min-height: 200px;
   color: #666;
+}
+
+.loading-gif {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 12px;
+  object-fit: contain;
 }
 
 .loading-spinner {
@@ -288,7 +297,7 @@ watch(
 }
 
 .summary-section {
-  background: rgba(248, 249, 250, 0.8);
+  background: rgba(255, 255, 255, 0.7);
   border-radius: 12px;
   padding: 16px;
   border: 1px solid rgba(0, 0, 0, 0.05);

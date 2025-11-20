@@ -3,11 +3,16 @@
     <Transition name="modal">
       <div v-if="visible" class="modal-overlay" @click="handleClose">
         <div class="modal-container" @click.stop>
-          <div class="modal-header">
-            <h2 class="modal-title">{{ platformConfig.name }} 完整榜单</h2>
-            <button class="modal-close" @click="handleClose">✕</button>
+          <div class="modal-header-bar">
+            <div class="modal-title-block">
+              <img src="/static/icons/rank.png" alt="Rank" class="modal-rank-icon" />
+              <div class="modal-title">{{ modalTitle }}</div>
+              <div class="modal-header-text">更新于：{{ updateTimeText }}</div>
+            </div>
+            <button class="modal-close-btn" @click="handleClose" aria-label="关闭">
+              ✕
+            </button>
           </div>
-
           <div class="modal-content">
             <div v-if="loading" class="modal-loading">
               <div class="loading-spinner"></div>
@@ -33,16 +38,12 @@
                 <div class="item-content">
                   <div class="item-title">{{ item.title }}</div>
                   <div class="item-meta">
-                    <span 
-                      v-if="item.platform" 
-                      class="item-platform"
-                      :style="{ 
-                        borderColor: PLATFORM_CONFIG[item.platform]?.color || '#667eea',
-                        color: PLATFORM_CONFIG[item.platform]?.color || '#667eea'
-                      }"
-                    >
-                      {{ getPlatformName(item.platform) }}
-                    </span>
+                    <img
+                      v-if="item.platform && shouldShowPlatformIcon"
+                      :src="getPlatformIcon(item.platform)"
+                      :alt="getPlatformName(item.platform)"
+                      class="item-platform-icon"
+                    />
                     <span v-if="item.category" class="item-category">{{ getCategoryName(item.category) }}</span>
                     <span
                       v-if="item.heat > 0"
@@ -63,32 +64,55 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { HotSearchItem, Platform } from '@/types'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { Platform } from '@/types'
+import type { HotSearchItem } from '@/types'
 import { formatHeat, getHeatLevelClass } from '@/utils/formatHeat'
 import { getCategoryName, getPlatformName } from '@/utils/categoryMapper'
 
+type ModalPlatform = Platform | 'AGGREGATE' | 'CATEGORY'
+
 const props = defineProps<{
   visible: boolean
-  platform: Platform
+  platform: ModalPlatform
   items: HotSearchItem[]
   loading?: boolean
   error?: string
+  title?: string
+  showPlatformIcon?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
 }>()
 
-const PLATFORM_CONFIG = {
+const PLATFORM_CONFIG: Record<ModalPlatform, { name: string; color: string }> = {
   WEIBO: { name: '微博', color: '#E1306C' },
   TOUTIAO: { name: '今日头条', color: '#FF4757' },  // 橙红色，与微博粉红色区分
   BILIBILI: { name: 'Bilibili', color: '#64B5F6' },  // 浅蓝色
   DOUYIN: { name: '抖音', color: '#000' },
   AGGREGATE: { name: '全平台', color: '#667eea' },
+  CATEGORY: { name: '分类', color: '#7c3aed' },
 }
 
 const platformConfig = computed(() => PLATFORM_CONFIG[props.platform] || PLATFORM_CONFIG.AGGREGATE)
+const modalTitle = computed(() => props.title || `${platformConfig.value.name}热搜榜`)
+const shouldShowPlatformIcon = computed(() => {
+  if (typeof props.showPlatformIcon === 'boolean') {
+    return props.showPlatformIcon
+  }
+  return props.platform === 'AGGREGATE' || props.platform === 'CATEGORY'
+})
+
+const getPlatformIcon = (platform: Platform) => {
+  const map: Record<Platform, string> = {
+    [Platform.WEIBO]: '/static/icons/weibo.jpg',
+    [Platform.TOUTIAO]: '/static/icons/toutiao.png',
+    [Platform.BILIBILI]: '/static/icons/bilibili.png',
+    [Platform.DOUYIN]: '/static/icons/doyin.png',
+  }
+  return map[platform]
+}
 
 const getRankClass = (index: number) => {
   if (index === 0) return 'rank-1'
@@ -106,6 +130,37 @@ const handleItemClick = (item: HotSearchItem) => {
 const handleClose = () => {
   emit('close')
 }
+
+// 更新时间显示
+const updateTimeText = ref('刚刚')
+let updateTimer: ReturnType<typeof setInterval> | null = null
+let secondsElapsed = 0
+
+const updateTimeDisplay = () => {
+  secondsElapsed++
+  if (secondsElapsed < 60) {
+    updateTimeText.value = `${secondsElapsed}秒前`
+  } else if (secondsElapsed < 3600) {
+    const minutes = Math.floor(secondsElapsed / 60)
+    updateTimeText.value = `${minutes}分钟前`
+  } else {
+    const hours = Math.floor(secondsElapsed / 3600)
+    updateTimeText.value = `${hours}小时前`
+  }
+}
+
+onMounted(() => {
+  secondsElapsed = 0
+  updateTimeText.value = '刚刚'
+  updateTimer = setInterval(updateTimeDisplay, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (updateTimer) {
+    clearInterval(updateTimer)
+    updateTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -124,60 +179,98 @@ const handleClose = () => {
 }
 
 .modal-container {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
+  border: none;
+  border-radius: 28px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
   max-width: 700px;
   width: 100%;
-  max-height: 75vh;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
-.modal-header {
+.modal-header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 32px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: #f8f9fa;
+  padding: 20px 24px 0;
+  gap: 16px;
+  position: relative;
+}
+
+.modal-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.modal-rank-icon {
+  position: absolute;
+  left: -5px;
+  top: 70%;
+  transform: translateY(-50%);
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
 }
 
 .modal-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1a1a1a;
-  letter-spacing: 0.5px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2933;
+  text-align: center;
 }
 
-.modal-close {
-  width: 36px;
-  height: 36px;
+.modal-close-btn {
+  position: static;
+  width: 38px;
+  height: 38px;
   border: none;
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.9);
   border-radius: 50%;
-  font-size: 20px;
-  color: #666;
+  font-size: 22px;
+  color: #555;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.modal-close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: #333;
-  transform: rotate(90deg);
+.modal-close-btn:hover {
+  background: #fff;
+  color: #1f2933;
+  transform: rotate(90deg) scale(1.05);
+}
+
+.modal-header-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  backdrop-filter: none;
+  width: fit-content;
+  text-align: center;
+  margin: 0 auto;
 }
 
 .modal-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 300px;
+  margin-top: 24px;
+  padding-bottom: 20px;
 }
 
 /* 隐藏滚动条但保持滚动功能 */
@@ -236,7 +329,7 @@ const handleClose = () => {
 }
 
 .hot-list {
-  padding: 12px 0;
+  padding: 12px 0 20px 0;
 }
 
 .hot-item {
@@ -255,24 +348,8 @@ const handleClose = () => {
 }
 
 .hot-item:hover {
-  background: rgba(102, 126, 234, 0.05);
+  background: radial-gradient(ellipse at 0% 50%, rgba(255, 248, 220, 0.5) 0%, rgba(255, 253, 208, 0.25) 20%, rgba(255, 255, 240, 0.12) 40%, transparent 60%);
   transform: translateX(8px);
-}
-
-.hot-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.hot-item:hover::before {
-  opacity: 1;
 }
 
 .item-rank {
@@ -336,6 +413,13 @@ const handleClose = () => {
   font-size: 12px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.item-platform-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
 }
 
 .item-platform {

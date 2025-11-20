@@ -87,7 +87,9 @@ const handleClear = () => {
 </script>
 
 <template>
-  <div class="qna-container">
+  <div class="qna-page">
+    <div class="animated-overlay"></div>
+    <div class="qna-container">
     <div class="header">
       <h1>智能问答</h1>
     </div>
@@ -234,14 +236,92 @@ const handleClear = () => {
       description="提出问题后，AI 将为你生成答案"
       style="margin-top: 40px"
     />
+    </div>
   </div>
 </template>
 
 <style scoped lang="css">
+.qna-page {
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  background: url('/static/images/background2.jpg') no-repeat center center;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+.animated-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+
+/* 左上角阳光效果 */
+.animated-overlay::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.35) 15%,
+    rgba(255, 255, 255, 0.25) 30%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.08) 60%,
+    transparent 80%
+  );
+  filter: blur(45px);
+  animation: sunGlow 8s ease-in-out infinite;
+}
+
+/* 流动光效 */
+.animated-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
+  animation: sunGlow 8s ease-in-out infinite;
+  pointer-events: none;
+  filter: blur(35px);
+}
+
+@keyframes sunGlow {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes flowingLight {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(50%);
+  }
+}
+
 .qna-container {
   padding: 20px;
   max-width: 900px;
   margin: 0 auto;
+  position: relative;
+  z-index: 2;
 }
 
 .header {
@@ -278,6 +358,32 @@ const handleClear = () => {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+}
+
+.button-group :deep(.el-button--primary) {
+  background: url('/static/icons/banner2.png') no-repeat center center !important;
+  background-size: 100% 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  padding: 10px 28px !important;
+  min-height: 42px !important;
+  font-size: 15px !important;
+}
+
+.button-group :deep(.el-button:not(.el-button--primary)) {
+  background: url('/static/icons/gold banner.png') no-repeat center center !important;
+  background-size: 100% 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  padding: 10px 28px !important;
+  min-height: 42px !important;
+  font-size: 15px !important;
 }
 
 .answer-card {
@@ -333,5 +439,27 @@ const handleClear = () => {
 .related-hotsearch h4 {
   margin: 0 0 12px 0;
   color: #303133;
+}
+
+/* 平台选择按钮高亮动效 */
+.form-group :deep(.el-radio-button__inner) {
+  transition: all 0.3s ease;
+}
+
+.form-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border-color: #667eea !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: scale(1.05);
+}
+
+.form-group :deep(.el-radio-button__inner) {
+  border-color: #dcdfe6;
+  color: #606266;
+}
+
+.form-group :deep(.el-radio-button__inner:hover) {
+  color: #667eea;
 }
 </style>

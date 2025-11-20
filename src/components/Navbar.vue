@@ -7,6 +7,9 @@
         <router-link to="/culture" class="nav-item" active-class="active">文化</router-link>
         <router-link to="/tech" class="nav-item" active-class="active">科技</router-link>
         <router-link to="/" class="nav-item nav-item-main" active-class="active">首页</router-link>
+        <router-link to="/" class="nav-item nav-logo-item" :class="{ 'is-home': isHomePage }" active-class="active">
+          <img src="/static/icons/LOGO2.png" alt="Logo" class="nav-logo-img" />
+        </router-link>
         <router-link to="/hot-search" class="nav-item nav-item-main" active-class="active"
           >热搜</router-link
         >
@@ -20,7 +23,11 @@
 </template>
 
 <script setup lang="ts">
-// No logic needed for now
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+const isHomePage = computed(() => route.path === '/')
 </script>
 
 <style scoped>
@@ -29,8 +36,8 @@
   top: 0;
   z-index: 1000;
   background: transparent;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .navbar-container {
@@ -61,8 +68,8 @@
   padding: 8px 16px;
   color: #555;
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   border-radius: 6px;
   white-space: nowrap;
   transition: all 0.3s ease;
@@ -91,13 +98,45 @@
 }
 
 .nav-item-main {
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 800;
+  font-size: 19px;
   color: #2c3e50;
+  padding: 10px 22px;
 }
 
 .nav-item-main:hover {
   color: #1a252f;
+}
+
+.nav-logo-item {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.nav-logo-item.is-home {
+  background: transparent !important;
+}
+
+.nav-logo-item.is-home:hover {
+  background: transparent !important;
+}
+
+.nav-logo-item.is-home.active::after {
+  display: none;
+}
+
+.nav-logo-img {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.nav-logo-item:hover .nav-logo-img {
+  transform: scale(1.1);
 }
 
 @media (max-width: 768px) {
@@ -117,6 +156,11 @@
   .nav-item-main {
     font-size: 13px;
     padding: 6px 12px;
+  }
+
+  .nav-logo-img {
+    width: 42px;
+    height: 42px;
   }
 }
 </style>

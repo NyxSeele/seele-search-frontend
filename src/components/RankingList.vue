@@ -2,18 +2,20 @@
   <div class="ranking-list">
     <!-- Loading -->
     <div v-if="loading" class="list-loading">
-      <div class="loading-spinner"></div>
+      <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
       <p>加载中...</p>
     </div>
 
-    <!-- Error -->
-    <div v-else-if="error" class="list-error">
-      <p>{{ error }}</p>
+    <!-- Error - Show loading instead -->
+    <div v-else-if="error" class="list-loading">
+      <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+      <p>加载中...</p>
     </div>
 
-    <!-- Empty -->
-    <div v-else-if="items.length === 0" class="list-empty">
-      <p>暂无数据</p>
+    <!-- Empty - Show loading instead -->
+    <div v-else-if="items.length === 0" class="list-loading">
+      <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+      <p>加载中...</p>
     </div>
 
     <!-- List -->
@@ -26,7 +28,7 @@
       </div>
       <div class="table-body">
         <div
-          v-for="(item, index) in items"
+          v-for="(item, index) in visibleItems"
           :key="item.id"
           class="table-row"
           @click="handleItemClick(item)"
@@ -43,31 +45,54 @@
             </span>
           </div>
           <div class="col-platform">
-            <span
-              class="platform-badge"
-              :style="{
-                borderColor: getPlatformColor(item.platform),
-                color: getPlatformColor(item.platform),
-              }"
-            >
-              {{ getPlatformLabel(item.platform) }}
-            </span>
+            <div class="platform-icon-wrapper">
+              <img
+                :src="getPlatformIcon(item.platform)"
+                :alt="getPlatformLabel(item.platform)"
+                class="platform-icon"
+              />
+            </div>
           </div>
         </div>
+        <button
+          v-if="showViewAllButton"
+          class="inline-view-all"
+          type="button"
+          @click.stop="handleViewAllClick"
+        >
+          <img src="/static/icons/add.png" alt="查看全部" class="view-all-icon" />
+          <span>查看全部</span>
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { HotSearchItem, Platform } from '@/types'
+import { computed } from 'vue'
+import { Platform } from '@/types'
+import type { HotSearchItem } from '@/types'
 import { formatHeat, getHeatLevelClass } from '@/utils/formatHeat'
 
-defineProps<{
+const props = defineProps<{
   items: HotSearchItem[]
   loading?: boolean
   error?: string
+  maxVisible?: number
 }>()
+
+const emit = defineEmits<{
+  'view-all': []
+}>()
+
+const getLimit = () => props.maxVisible ?? 6
+
+const visibleItems = computed(() => props.items.slice(0, getLimit()))
+const showViewAllButton = computed(() => !props.loading && props.items.length > getLimit())
+
+const handleViewAllClick = () => {
+  emit('view-all')
+}
 
 const getRankClass = (index: number) => {
   if (index === 0) return 'rank-1'
@@ -96,6 +121,16 @@ const getPlatformColor = (platform: Platform) => {
   return map[platform]
 }
 
+const getPlatformIcon = (platform: Platform) => {
+  const map: Record<Platform, string> = {
+    [Platform.WEIBO]: '/static/icons/weibo.jpg',
+    [Platform.TOUTIAO]: '/static/icons/toutiao.png',
+    [Platform.BILIBILI]: '/static/icons/bilibili.png',
+    [Platform.DOUYIN]: '/static/icons/doyin.png',
+  }
+  return map[platform]
+}
+
 const handleItemClick = (item: HotSearchItem) => {
   if (item.url) {
     window.open(item.url, '_blank')
@@ -108,15 +143,20 @@ const handleItemClick = (item: HotSearchItem) => {
   width: 100%;
 }
 
-.list-loading,
-.list-error,
-.list-empty {
+.list-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 400px;
-  color: #999;
+  color: #666;
+}
+
+.loading-gif {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 16px;
+  object-fit: contain;
 }
 
 .loading-spinner {
@@ -140,18 +180,20 @@ const handleItemClick = (item: HotSearchItem) => {
 
 .ranking-table {
   width: 100%;
-  background: #fff;
-  border-radius: 8px;
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
+  border: none;
+  border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 .table-header {
   display: grid;
   grid-template-columns: 80px 1fr 140px 140px;
   padding: 20px 28px;
-  background: #fafafa;
-  border-bottom: 2px solid #e8e8e8;
+  background: transparent;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 16px;
   font-weight: 700;
   color: #555;
@@ -185,7 +227,51 @@ const handleItemClick = (item: HotSearchItem) => {
 }
 
 .table-body {
-  background: #fff;
+  background: transparent;
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.inline-view-all {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translate(-50%, 0);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2933;
+  cursor: pointer;
+  animation: inlinePulse 2.5s ease-in-out infinite;
+  transition: all 0.3s ease;
+}
+
+.inline-view-all:hover {
+  transform: translate(-50%, -2px);
+  color: #0f172a;
+  animation: none;
+}
+
+.view-all-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+@keyframes inlinePulse {
+  0%,
+  100% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50%, 0) scale(0.94);
+  }
 }
 
 .table-row {
@@ -202,7 +288,7 @@ const handleItemClick = (item: HotSearchItem) => {
 }
 
 .table-row:hover {
-  background: #f5f7fa;
+  background: radial-gradient(ellipse at 0% 50%, rgba(255, 248, 220, 0.6) 0%, rgba(255, 253, 208, 0.3) 20%, rgba(255, 255, 240, 0.15) 40%, transparent 60%);
   transform: translateX(4px);
 }
 
@@ -297,20 +383,27 @@ const handleItemClick = (item: HotSearchItem) => {
   justify-content: flex-end;
 }
 
-.platform-badge {
-  display: inline-block;
-  padding: 6px 16px;
-  border: 2px solid;
-  border-radius: 14px;
-  font-size: 14px;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.9);
-  transition: all 0.3s ease;
+.platform-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.7));
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
 }
 
-.table-row:hover .platform-badge {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.platform-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+
+.table-row:hover .platform-icon-wrapper {
+  transform: scale(1.08);
 }
 
 @media (max-width: 768px) {

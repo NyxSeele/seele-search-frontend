@@ -1,11 +1,11 @@
 <template>
   <footer class="app-footer">
-    <p class="copyright">Copyright © 2024 小布丁 版权所有</p>
+    <p class="copyright">Copyright © 2025 小布丁 版权所有</p>
   </footer>
 </template>
 
 <script setup lang="ts">
-// Footer component
+// simple footer
 </script>
 
 <style scoped>
@@ -14,7 +14,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 5;
+  z-index: 20;
   padding: 12px 20px;
   text-align: center;
   background: transparent;

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Navbar from '@/components/Navbar.vue'
-import AnimatedBackground from '@/components/AnimatedBackground.vue'
 import HotSearchCard from '@/components/HotSearchCard.vue'
 import AggregateCard from '@/components/AggregateCard.vue'
 import FullListModal from '@/components/FullListModal.vue'
 import AISummaryPopover from '@/components/AISummaryPopover.vue'
 import QNAPanel from '@/components/QNAPanel.vue'
 import Footer from '@/components/Footer.vue'
-import { Platform, HotSearchItem, AISummary } from '@/types'
+import { Platform } from '@/types'
+import type { HotSearchItem, AISummary } from '@/types'
 import hotSearchApi from '@/api/hotSearch'
 import aiApi from '@/api/ai'
 import { sortByAggregateScore, sortWithPlatformBalance } from '@/utils/aggregateRanking'
@@ -20,12 +20,12 @@ const bilibiliItems = ref<HotSearchItem[]>([])
 const douyinItems = ref<HotSearchItem[]>([])
 const aggregateItems = ref<HotSearchItem[]>([])
 
-// 加载状态
-const weiboLoading = ref(false)
-const TOUTIAOLoading = ref(false)
-const bilibiliLoading = ref(false)
-const douyinLoading = ref(false)
-const aggregateLoading = ref(false)
+// 加载状态（初始为true，显示骨架屏）
+const weiboLoading = ref(true)
+const TOUTIAOLoading = ref(true)
+const bilibiliLoading = ref(true)
+const douyinLoading = ref(true)
+const aggregateLoading = ref(true)
 
 // 错误状态
 const weiboError = ref('')
@@ -36,7 +36,9 @@ const aggregateError = ref('')
 
 // 弹窗
 const modalVisible = ref(false)
-const modalPlatform = ref<Platform>(Platform.WEIBO)
+type ModalPlatform = Platform | 'AGGREGATE' | 'CATEGORY'
+
+const modalPlatform = ref<ModalPlatform>(Platform.WEIBO)
 const modalItems = ref<HotSearchItem[]>([])
 const modalLoading = ref(false)
 const modalError = ref('')
@@ -52,8 +54,91 @@ const aiTriggerElement = ref<HTMLElement | null>(null)
 // QNA面板
 const qnaPanelVisible = ref(false)
 
+// QNA按钮拖动
+const qnaFabPosition = ref({ x: 0, y: 0 })
+const isDragging = ref(false)
+const dragStart = ref({ x: 0, y: 0 })
+const hasDragged = ref(false)
+const DRAG_THRESHOLD = 6
+const showQnaTooltip = ref(true)
+let tooltipHideTimer: number | null = null
+const platformRetryTimers: Partial<Record<Platform, ReturnType<typeof setTimeout> | null>> = {}
+
+const clearPlatformRetry = (platform: Platform) => {
+  if (platformRetryTimers[platform]) {
+    clearTimeout(platformRetryTimers[platform]!)
+    platformRetryTimers[platform] = null
+  }
+}
+
+const schedulePlatformRetry = (platform: Platform, delay = 8000) => {
+  if (platformRetryTimers[platform]) return
+  platformRetryTimers[platform] = window.setTimeout(() => {
+    platformRetryTimers[platform] = null
+    console.log(`⏱️ 自动重试加载${platform}平台数据...`)
+    loadPlatformData(platform, true)
+  }, delay)
+}
+
+const handleQnaMouseDown = (e: MouseEvent) => {
+  isDragging.value = true
+  hasDragged.value = false
+  dragStart.value = { x: e.clientX - qnaFabPosition.value.x, y: e.clientY - qnaFabPosition.value.y }
+  document.addEventListener('mousemove', handleQnaMouseMove)
+  document.addEventListener('mouseup', handleQnaMouseUp)
+}
+
+const handleQnaMouseMove = (e: MouseEvent) => {
+  if (!isDragging.value) return
+  const nextPosition = {
+    x: e.clientX - dragStart.value.x,
+    y: e.clientY - dragStart.value.y,
+  }
+  const deltaX = nextPosition.x - qnaFabPosition.value.x
+  const deltaY = nextPosition.y - qnaFabPosition.value.y
+  if (!hasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      hasDragged.value = true
+    }
+  }
+  if (hasDragged.value) {
+    qnaFabPosition.value = nextPosition
+  }
+}
+
+const handleQnaMouseUp = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleQnaMouseMove)
+  document.removeEventListener('mouseup', handleQnaMouseUp)
+}
+
+const handleQnaClick = () => {
+  // 只有在没有拖动的情况下才切换面板
+  if (hasDragged.value) {
+    hasDragged.value = false
+    return
+  }
+  qnaPanelVisible.value = !qnaPanelVisible.value
+  hideTooltipTemporarily()
+}
+
+const handleQnaMouseEnter = () => {
+  hideTooltipTemporarily()
+}
+
+const hideTooltipTemporarily = () => {
+  showQnaTooltip.value = false
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+  }
+  tooltipHideTimer = window.setTimeout(() => {
+    showQnaTooltip.value = true
+  }, 10000)
+}
+
 // 加载单个平台数据（前10）
-const loadPlatformData = async (platform: Platform) => {
+const loadPlatformData = async (platform: Platform, silent = false) => {
   console.log(`🔄 开始加载${platform}平台数据...`)
   const loadingRef =
     platform === Platform.WEIBO
@@ -80,20 +165,25 @@ const loadPlatformData = async (platform: Platform) => {
           ? bilibiliError
           : douyinError
 
-  loadingRef.value = true
+  if (!silent) {
+    loadingRef.value = true
+  }
   errorRef.value = ''
   try {
     const response = await hotSearchApi.getHotSearches({ platform })
     console.log(`📊 ${platform}平台原始数据:`, response.length, '条')
-    
+
     // 打印前3条数据用于调试
     if (response.length > 0) {
-      console.log(`📋 ${platform}前3条数据样本:`, response.slice(0, 3).map(item => ({
-        title: item.title,
-        platform: item.platform,
-        heat: item.heat,
-        category: item.category
-      })))
+      console.log(
+        `📋 ${platform}前3条数据样本:`,
+        response.slice(0, 3).map((item) => ({
+          title: item.title,
+          platform: item.platform,
+          heat: item.heat,
+          category: item.category,
+        })),
+      )
     }
 
     // 验证数据平台是否正确
@@ -105,11 +195,11 @@ const loadPlatformData = async (platform: Platform) => {
     // 过滤有效数据：必须是当前平台的数据，放宽heat条件
     const filtered = response.filter(
       (item) =>
-        item.platform === platform && 
-        item.heat >= 0 && 
+        item.platform === platform &&
+        item.heat >= 0 &&
         !item.title?.includes('【降级数据】') &&
-        item.title && 
-        item.title.trim().length > 0
+        item.title &&
+        item.title.trim().length > 0,
     )
     console.log(`✅ ${platform}过滤后有效数据:`, filtered.length, '条')
 
@@ -127,17 +217,21 @@ const loadPlatformData = async (platform: Platform) => {
     const sorted = unique.sort((a, b) => (a.rank || 999) - (b.rank || 999))
     itemsRef.value = sorted.slice(0, 10)
     console.log(`✅ ${platform}平台数据加载成功，显示${itemsRef.value.length}条，已按rank排序`)
+    clearPlatformRetry(platform)
   } catch (error) {
     console.error(`❌ 加载${platform}失败:`, error)
     errorRef.value = '加载失败'
+    schedulePlatformRetry(platform)
   } finally {
     loadingRef.value = false
   }
 }
 
 // 加载聚合数据（四个平台各随机10条）
-const loadAggregateData = async () => {
-  aggregateLoading.value = true
+const loadAggregateData = async (silent = false) => {
+  if (!silent) {
+    aggregateLoading.value = true
+  }
   aggregateError.value = ''
   try {
     // 获取所有平台数据（不等待，避免一个失败导致全部失败）
@@ -160,7 +254,11 @@ const loadAggregateData = async () => {
 
     // 过滤有效数据：放宽heat条件
     const filtered = allItems.filter(
-      (item) => item.heat >= 0 && !item.title?.includes('【降级数据】') && item.title && item.title.trim().length > 0,
+      (item) =>
+        item.heat >= 0 &&
+        !item.title?.includes('【降级数据】') &&
+        item.title &&
+        item.title.trim().length > 0,
     )
 
     // 根据title去重
@@ -200,7 +298,11 @@ const handleViewAll = async (platform: Platform) => {
     // 过滤有效数据：必须是当前平台、非降级数据
     const filtered = response.filter(
       (item) =>
-        item.platform === platform && item.heat >= 0 && !item.title?.includes('【降级数据】') && item.title && item.title.trim().length > 0,
+        item.platform === platform &&
+        item.heat >= 0 &&
+        !item.title?.includes('【降级数据】') &&
+        item.title &&
+        item.title.trim().length > 0,
     )
     console.log(`✅ ${platform}过滤后有效数据:`, filtered.length, '条')
 
@@ -228,7 +330,7 @@ const handleViewAll = async (platform: Platform) => {
 
 // 查看聚合卡片全部
 async function handleViewAllAggregate() {
-  modalPlatform.value = 'AGGREGATE' as Platform // 设置为聚合类型
+  modalPlatform.value = 'AGGREGATE'
   modalVisible.value = true
   modalLoading.value = true
   modalError.value = ''
@@ -254,7 +356,11 @@ async function handleViewAllAggregate() {
 
     // 过滤有效数据：非降级数据
     const filtered = allItems.filter(
-      (item) => item.heat >= 0 && !item.title?.includes('【降级数据】') && item.title && item.title.trim().length > 0,
+      (item) =>
+        item.heat >= 0 &&
+        !item.title?.includes('【降级数据】') &&
+        item.title &&
+        item.title.trim().length > 0,
     )
     console.log(`✅ 全平台过滤后有效数据:`, filtered.length, '条')
 
@@ -286,8 +392,8 @@ const closeModal = () => {
 }
 
 // AI总结 - 全局
-const handleGlobalAISummary = async (element: HTMLElement) => {
-  aiTriggerElement.value = element
+const handleGlobalAISummary = async (element?: HTMLElement) => {
+  aiTriggerElement.value = element ?? aiTriggerElement.value ?? document.body
   aiModalTitle.value = '全平台热搜AI总结'
   aiModalVisible.value = true
   aiLoading.value = true
@@ -340,31 +446,31 @@ const closeAIModal = () => {
 
 const retryAISummary = () => {
   if (aiModalTitle.value === '全平台热搜AI总结') {
-    handleGlobalAISummary()
+    handleGlobalAISummary(aiTriggerElement.value ?? document.body)
   }
 }
 
 // 自动刷新定时器
-let aggregateRefreshTimer: NodeJS.Timeout | null = null
-let platformRefreshTimer: NodeJS.Timeout | null = null
+let aggregateRefreshTimer: ReturnType<typeof setInterval> | null = null
+let platformRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 const startAutoRefresh = () => {
   console.log('🔄 启动自动刷新...')
 
-  // 聚合卡片每30秒刷新一次
+  // 聚合卡片每60秒刷新一次（无感刷新）
   aggregateRefreshTimer = setInterval(() => {
     console.log('🔄 自动刷新聚合数据...')
-    loadAggregateData()
-  }, 30000) // 30秒
+    loadAggregateData(true) // silent模式
+  }, 60000) // 60秒
 
-  // 四个小卡片每30秒刷新一次
+  // 四个小卡片每60秒刷新一次（无感刷新）
   platformRefreshTimer = setInterval(() => {
     console.log('🔄 自动刷新四个平台数据...')
-    loadPlatformData(Platform.WEIBO)
-    loadPlatformData(Platform.TOUTIAO)
-    loadPlatformData(Platform.BILIBILI)
-    loadPlatformData(Platform.DOUYIN)
-  }, 30000) // 30秒
+    loadPlatformData(Platform.WEIBO, true) // silent模式
+    loadPlatformData(Platform.TOUTIAO, true) // silent模式
+    loadPlatformData(Platform.BILIBILI, true) // silent模式
+    loadPlatformData(Platform.DOUYIN, true) // silent模式
+  }, 60000) // 60秒
 }
 
 const stopAutoRefresh = () => {
@@ -376,17 +482,24 @@ const stopAutoRefresh = () => {
     clearInterval(platformRefreshTimer)
     platformRefreshTimer = null
   }
+  Object.values(Platform).forEach((platformKey) => {
+    clearPlatformRetry(platformKey as Platform)
+  })
   console.log('🛑 停止自动刷新')
 }
 
-onMounted(() => {
-  // 初始加载所有数据
+onMounted(async () => {
+  // 初始加载所有数据（并行加载，提高速度）
   console.log('🚀 页面加载，开始获取数据...')
-  loadPlatformData(Platform.WEIBO)
-  loadPlatformData(Platform.TOUTIAO)
-  loadPlatformData(Platform.BILIBILI)
-  loadPlatformData(Platform.DOUYIN)
-  loadAggregateData()
+
+  // 并行加载所有数据，减少等待时间
+  await Promise.all([
+    loadPlatformData(Platform.WEIBO),
+    loadPlatformData(Platform.TOUTIAO),
+    loadPlatformData(Platform.BILIBILI),
+    loadPlatformData(Platform.DOUYIN),
+    loadAggregateData(),
+  ])
 
   // 启动自动刷新
   startAutoRefresh()
@@ -399,17 +512,11 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="hot-search-page">
-    <AnimatedBackground />
+    <div class="animated-overlay"></div>
     <Navbar />
 
     <main class="page-content">
       <div class="hot-search-container">
-        <!-- 中间标题区 -->
-        <div class="center-header">
-          <h1 class="page-title">热搜聚合</h1>
-          <p class="page-subtitle">实时追踪全平台热点话题</p>
-        </div>
-
         <!-- 左上 - 微博 -->
         <div class="corner-card top-left">
           <HotSearchCard
@@ -439,6 +546,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 中间 - 聚合 -->
+        <div class="center-dashboard-icon"></div>
         <div class="corner-card center-card">
           <AggregateCard
             :items="aggregateItems"
@@ -488,6 +596,7 @@ onBeforeUnmount(() => {
       :items="modalItems"
       :loading="modalLoading"
       :error="modalError"
+      :show-platform-icon="modalPlatform === 'AGGREGATE' || modalPlatform === 'CATEGORY'"
       @close="closeModal"
     />
 
@@ -504,11 +613,18 @@ onBeforeUnmount(() => {
     />
 
     <!-- AI提问悬浮按钮 -->
-    <div class="qna-fab-container">
-      <button class="qna-fab" @click="qnaPanelVisible = true" title="AI智能问答">
-        <span class="fab-icon">🤖</span>
+    <div
+      class="qna-fab-container"
+      :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
+      @mousedown="handleQnaMouseDown"
+      @mouseenter="handleQnaMouseEnter"
+    >
+      <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
+        <img src="/static/icons/thinking.png" alt="AI" class="fab-icon-img" />
       </button>
-      <div class="qna-tooltip">有什么问题都可以点我哦</div>
+      <div v-if="showQnaTooltip" class="qna-tooltip">
+        {{ qnaPanelVisible ? '点我也可以关闭提问哦' : '有什么问题都可以点我哦' }}
+      </div>
     </div>
 
     <!-- QNA面板 -->
@@ -523,7 +639,68 @@ onBeforeUnmount(() => {
 .hot-search-page {
   min-height: 100vh;
   position: relative;
+  overflow-x: hidden;
+  background: url('/static/images/background.webp') no-repeat center center;
+  background-size: 100% 100%;
+  background-attachment: fixed;
+}
+
+.animated-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
   overflow: hidden;
+}
+
+/* 左上角阳光效果 */
+.animated-overlay::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.35) 15%,
+    rgba(255, 255, 255, 0.25) 30%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.08) 60%,
+    transparent 80%
+  );
+  filter: blur(45px);
+  animation: sunGlow 8s ease-in-out infinite;
+}
+
+/* 流动光效 */
+.animated-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
+  animation: sunGlow 8s ease-in-out infinite;
+  pointer-events: none;
+  filter: blur(35px);
+}
+
+@keyframes sunGlow {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.12);
+  }
 }
 
 .page-content {
@@ -531,6 +708,7 @@ onBeforeUnmount(() => {
   height: calc(100vh - 60px);
   overflow: hidden;
   padding: 0;
+  z-index: 2;
 }
 
 .hot-search-container {
@@ -539,40 +717,15 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-/* 中间标题区 - 调整位置，往上移动 */
 .center-header {
-  position: absolute;
-  top: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  z-index: 5;
-  background: transparent;
-  padding: 16px 32px;
-  margin-bottom: 40px;
+  display: none;
 }
 
-.page-title {
-  font-size: 36px;
-  font-weight: 900;
-  margin: 0 0 8px 0;
-  color: #2c3e50;
-  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.8);
-}
-
-.page-subtitle {
-  font-size: 18px;
-  color: #2c3e50;
-  margin: 0;
-  font-weight: 500;
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
-}
-
-/* 四个角落的卡片 - 缩小尺寸 */
+/* 四个角落的卡片 - 长方形布局 */
 .corner-card {
   position: absolute;
   width: 280px;
-  height: 350px;
+  height: 320px;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -583,51 +736,74 @@ onBeforeUnmount(() => {
 
 /* 左上 - 微博卡片位置（往内靠）*/
 .top-left {
-  top: 20px;
-  left: 80px;
+  top: 10px;
+  left: 100px;
 }
 
 /* 右上 - 今日头条卡片位置（往内靠）*/
 .top-right {
-  top: 20px;
-  right: 80px;
+  top: 10px;
+  right: 100px;
 }
 
-/* 左下 - B站卡片位置（往内靠）*/
+/* 左下 - B站卡片位置（往内靠，距离底部有一定距离）*/
 .bottom-left {
-  bottom: 20px;
-  left: 80px;
+  bottom: 95px;
+  left: 100px;
 }
 
-/* 右下 - 抖音卡片位置（往内靠）*/
+/* 右下 - 抖音卡片位置（往内靠，距离底部有一定距离）*/
 .bottom-right {
-  bottom: 20px;
-  right: 80px;
+  bottom: 95px;
+  right: 100px;
 }
 
-/* 中间聚合卡片 - 调整位置和大小 */
+/* 中间聚合卡片 - 往上移动 */
 .center-card {
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -40%);
-  width: 450px;
-  height: 600px;
+  transform: translate(-50%, -50%);
+  width: 520px;
+  height: 595px;
   z-index: 6;
 }
 
 .center-card:hover {
-  transform: translate(-50%, -40%) scale(1.02);
+  transform: translate(-50%, -50%) scale(1.02);
+}
+
+.center-dashboard-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, calc(-50% - 340px));
+  width: 350px;
+  height: 100px;
+  background: url('/static/icons/dashboard.png') no-repeat center center;
+  background-size: contain;
+  z-index: 5;
+  animation: strongPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes strongPulse {
+  0%,
+  100% {
+    transform: translate(-50%, calc(-50% - 340px)) scale(1);
+  }
+  50% {
+    transform: translate(-50%, calc(-50% - 340px)) scale(0.95);
+  }
 }
 
 @media (max-width: 1200px) {
   .corner-card {
     width: 280px;
-    height: 350px;
+    height: 340px;
   }
 
   .center-card {
-    width: 320px;
-    height: 420px;
+    width: 360px;
+    height: 460px;
   }
 
   .top-left,
@@ -668,18 +844,20 @@ onBeforeUnmount(() => {
 /* AI提问悬浮按钮容器 */
 .qna-fab-container {
   position: fixed;
-  bottom: 32px;
+  bottom: 100px;
   right: 32px;
   z-index: 1000;
+  cursor: move;
+  user-select: none;
 }
 
 .qna-fab {
-  width: 64px;
-  height: 64px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+  background: transparent;
   border: none;
-  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.4);
+  box-shadow: none;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
@@ -689,8 +867,8 @@ onBeforeUnmount(() => {
 }
 
 .qna-fab:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(14, 165, 233, 0.6);
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: none;
 }
 
 .qna-fab:active {
@@ -707,26 +885,28 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 76px;
   right: 0;
-  background: rgba(37, 99, 235, 0.95);
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 12px;
+  background: url('/static/icons/bubble.png') no-repeat center center;
+  background-size: contain;
+  background-color: transparent;
+  color: #ffb3d9;
+  padding: 16px 28px;
+  border-radius: 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+  box-shadow: none;
   animation: tooltipBounce 3s ease-in-out infinite;
   pointer-events: none;
   z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  min-width: 150px;
 }
 
 .qna-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 20px;
-  border: 6px solid transparent;
-  border-top-color: rgba(37, 99, 235, 0.95);
+  display: none;
 }
 
 @keyframes tooltipBounce {
@@ -741,9 +921,11 @@ onBeforeUnmount(() => {
   }
 }
 
-.fab-icon {
-  font-size: 32px;
+.fab-icon-img {
+  width: 82px;
+  height: 82px;
   animation: pulse 2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes pulse {

@@ -1,17 +1,21 @@
 <template>
   <div class="home-page">
-    <AnimatedBackground />
+    <div class="animated-overlay"></div>
     <Navbar />
 
     <main class="home-content">
       <div class="search-section">
-        <h1 class="welcome-title">
-          <span class="title-gradient">探索热搜</span>
-          <span class="title-subtitle">发现世界正在发生什么</span>
-        </h1>
+        <!-- Top Logo -->
+        <div class="top-logo"></div>
 
         <div class="action-buttons">
-          <router-link to="/hot-search" class="view-hot-search-btn"> 查看热搜 </router-link>
+          <div class="heat-icon-container" @click="goToHotSearch">
+            <img src="/static/icons/heat.png" alt="查看热搜" class="heat-icon" />
+            <div class="heat-bubble">
+              <img src="/static/icons/bubble.png" alt="气泡" class="bubble-img" />
+              <span class="bubble-text">点我查看热搜哦</span>
+            </div>
+          </div>
         </div>
 
         <div class="search-container">
@@ -130,11 +134,18 @@
     </main>
 
     <!-- AI提问悬浮按钮 -->
-    <div class="qna-fab-container">
-      <button class="qna-fab" @click="qnaPanelVisible = true" title="AI智能问答">
-        <span class="fab-icon">🤖</span>
+    <div
+      class="qna-fab-container"
+      :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
+      @mousedown="handleQnaMouseDown"
+      @mouseenter="handleQnaMouseEnter"
+    >
+      <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
+        <img src="/static/icons/thinking.png" alt="AI" class="fab-icon-img" />
       </button>
-      <div class="qna-tooltip">有什么问题都可以点我哦</div>
+      <div v-if="showQnaTooltip" class="qna-tooltip">
+        {{ qnaPanelVisible ? '点我也可以关闭提问哦' : '有什么问题都可以点我哦' }}
+      </div>
     </div>
 
     <!-- QNA面板 -->
@@ -153,7 +164,8 @@ import AnimatedBackground from '@/components/AnimatedBackground.vue'
 import QNAPanel from '@/components/QNAPanel.vue'
 import Footer from '@/components/Footer.vue'
 import hotSearchApi from '@/api/hotSearch'
-import { HotSearchItem, Platform } from '@/types'
+import type { HotSearchItem } from '@/types'
+import { Platform } from '@/types'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -161,6 +173,13 @@ const showSuggestions = ref(false)
 const loadingSuggestions = ref(false)
 const searchSuggestions = ref<string[]>([])
 const qnaPanelVisible = ref(false)
+const qnaFabPosition = ref({ x: 0, y: 0 })
+const isDragging = ref(false)
+const dragStart = ref({ x: 0, y: 0 })
+const hasDragged = ref(false)
+const DRAG_THRESHOLD = 6
+const showQnaTooltip = ref(true)
+let tooltipHideTimer: ReturnType<typeof setTimeout> | null = null
 
 const getPlatformLabel = (platform: Platform) => {
   const map: Record<Platform, string> = {
@@ -172,8 +191,8 @@ const getPlatformLabel = (platform: Platform) => {
   return map[platform]
 }
 
-// 防抖处理
-let searchTimer: NodeJS.Timeout | null = null
+  // 防抖处理（尽量接近即时响应）
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const handleSearchInput = async () => {
   if (!searchQuery.value.trim()) {
@@ -189,19 +208,19 @@ const handleSearchInput = async () => {
     clearTimeout(searchTimer)
   }
 
-  // 防抖，50ms后才请求，提升响应速度
+  // 轻量防抖，30ms 后请求，更接近浏览器原生搜索建议的速度
   searchTimer = setTimeout(async () => {
     loadingSuggestions.value = true
     try {
       const query = searchQuery.value.trim()
-      // 使用今日头条搜索建议API（JSONP方式，更稳定）
-      const callbackName = 'TOUTIAOSuggestion'
+      // 使用百度搜索建议API（JSONP方式，更稳定）
+      const callbackName = `baiduSuggestion_${Date.now()}`
 
       // 定义全局回调函数
       ;(window as any)[callbackName] = (data: any) => {
         try {
           if (data && data.s && Array.isArray(data.s)) {
-            searchSuggestions.value = data.s.slice(0, 7)
+            searchSuggestions.value = data.s.slice(0, 5)
           } else {
             searchSuggestions.value = []
           }
@@ -210,15 +229,18 @@ const handleSearchInput = async () => {
           searchSuggestions.value = []
         }
         loadingSuggestions.value = false
+        // 清理全局回调
+        delete (window as any)[callbackName]
       }
 
       const script = document.createElement('script')
-      script.src = `https://suggestion.TOUTIAO.com/su?wd=${encodeURIComponent(query)}&cb=${callbackName}`
+      script.src = `https://suggestion.baidu.com/su?wd=${encodeURIComponent(query)}&cb=${callbackName}`
 
       // 错误处理
       script.onerror = () => {
         searchSuggestions.value = []
         loadingSuggestions.value = false
+        delete (window as any)[callbackName]
       }
 
       document.head.appendChild(script)
@@ -229,13 +251,14 @@ const handleSearchInput = async () => {
         if (document.head.contains(script)) {
           document.head.removeChild(script)
         }
-      }, 2000)
+        delete (window as any)[callbackName]
+      }, 3000)
     } catch (error) {
       console.error('获取搜索建议失败:', error)
       searchSuggestions.value = []
       loadingSuggestions.value = false
     }
-  }, 50)
+  }, 30)
 }
 
 const clearSearch = () => {
@@ -259,11 +282,74 @@ const handleSearchSuggestion = (suggestion: string) => {
   window.open(searchUrl, '_blank')
 }
 
+const goToHotSearch = () => {
+  router.push('/hot-search')
+}
+
 const handleClickOutside = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (!target.closest('.search-container')) {
     showSuggestions.value = false
   }
+}
+
+const handleQnaMouseDown = (e: MouseEvent) => {
+  isDragging.value = true
+  hasDragged.value = false
+  dragStart.value = {
+    x: e.clientX - qnaFabPosition.value.x,
+    y: e.clientY - qnaFabPosition.value.y,
+  }
+  document.addEventListener('mousemove', handleQnaMouseMove)
+  document.addEventListener('mouseup', handleQnaMouseUp)
+}
+
+const handleQnaMouseMove = (e: MouseEvent) => {
+  if (!isDragging.value) return
+  const nextPosition = {
+    x: e.clientX - dragStart.value.x,
+    y: e.clientY - dragStart.value.y,
+  }
+  const deltaX = nextPosition.x - qnaFabPosition.value.x
+  const deltaY = nextPosition.y - qnaFabPosition.value.y
+  if (!hasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      hasDragged.value = true
+    }
+  }
+  if (hasDragged.value) {
+    qnaFabPosition.value = nextPosition
+  }
+}
+
+const handleQnaMouseUp = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleQnaMouseMove)
+  document.removeEventListener('mouseup', handleQnaMouseUp)
+}
+
+const handleQnaClick = () => {
+  if (hasDragged.value) {
+    hasDragged.value = false
+    return
+  }
+  qnaPanelVisible.value = !qnaPanelVisible.value
+  hideTooltipTemporarily()
+}
+
+const handleQnaMouseEnter = () => {
+  hideTooltipTemporarily()
+}
+
+const hideTooltipTemporarily = () => {
+  showQnaTooltip.value = false
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+  }
+  tooltipHideTimer = setTimeout(() => {
+    showQnaTooltip.value = true
+  }, 10000)
 }
 
 onMounted(() => {
@@ -272,6 +358,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('mousemove', handleQnaMouseMove)
+  document.removeEventListener('mouseup', handleQnaMouseUp)
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+  }
 })
 </script>
 
@@ -280,42 +371,114 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   position: relative;
   overflow: hidden;
+  background: url('/static/images/background.webp') no-repeat center center;
+  background-size: 100% 100%;
+  background-attachment: fixed;
+}
+
+.animated-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+
+/* 左上角阳光效果 */
+.animated-overlay::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.35) 15%,
+    rgba(255, 255, 255, 0.25) 30%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.08) 60%,
+    transparent 80%
+  );
+  filter: blur(45px);
+  animation: sunGlow 8s ease-in-out infinite;
+}
+
+/* 流动光效 */
+.animated-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
+  animation: sunGlow 8s ease-in-out infinite;
+  pointer-events: none;
+  filter: blur(35px);
+}
+
+@keyframes sunGlow {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes flowingLight {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(50%);
+  }
 }
 
 .home-content {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   min-height: calc(100vh - 60px);
-  padding: 80px 20px 40px;
+  padding: 20px;
+  position: relative;
+  z-index: 2;
+  margin-top: -180px;
 }
 
 .search-section {
   text-align: center;
   width: 100%;
-  max-width: 750px;
+  max-width: 880px;
 }
 
-.welcome-title {
-  margin: 0 0 48px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Top Logo */
+.top-logo {
+  width: 335px;
+  height: 335px;
+  background: url('/static/icons/LOGO3.png') no-repeat center center;
+  background-size: contain;
+  margin: 40px auto 20px;
+  position: relative;
+  top: 50px;
+  animation: floatUpDown 3s ease-in-out infinite;
 }
 
-.title-gradient {
-  font-size: 56px;
-  font-weight: 800;
-  color: #2c3e50;
-  letter-spacing: -2px;
-  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.8);
-}
-
-.title-subtitle {
-  font-size: 18px;
-  color: #2c3e50;
-  font-weight: 500;
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
+@keyframes floatUpDown {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
 }
 
 .action-buttons {
@@ -323,6 +486,69 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.heat-icon-container {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: transform 0.3s ease;
+}
+
+.heat-icon-container:hover {
+  transform: scale(1.1);
+}
+
+.heat-icon {
+  width: 110px;
+  height: 110px;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+  /* animation: pulse 2s ease-in-out infinite; */
+}
+
+.heat-icon-container:hover .heat-icon {
+  transform: scale(1.05);
+}
+
+.heat-bubble {
+  position: relative;
+  margin-left: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  /* animation: pulse 2s ease-in-out infinite; */
+}
+
+.bubble-img {
+  width: 170px;
+  height: auto;
+  object-fit: contain;
+}
+
+.bubble-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ffb3d9;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 0 4px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
 }
 
 .search-container {
@@ -333,14 +559,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   background: #ffffff;
-  border-radius: 32px;
+  border-radius: 36px;
   border: 1px solid #e0e0e0;
   overflow: hidden;
   transition: all 0.2s ease;
-  padding: 0 20px;
-  gap: 12px;
-  height: 60px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 0 28px;
+  gap: 16px;
+  height: 70px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .search-box-wrapper:hover {
@@ -365,11 +591,11 @@ onBeforeUnmount(() => {
   padding: 0;
   border: none;
   outline: none;
-  font-size: 16px;
+  font-size: 18px;
   color: #202124;
   background: transparent;
   min-width: 0;
-  line-height: 60px;
+  line-height: 70px;
 }
 
 .search-input::placeholder {
@@ -500,7 +726,7 @@ onBeforeUnmount(() => {
 }
 
 .suggestion-title {
-  font-size: 14px;
+  font-size: 18px;
   color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -523,32 +749,6 @@ onBeforeUnmount(() => {
   color: #999;
 }
 
-.view-hot-search-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 32px;
-  background: #fff;
-  color: #0078d4;
-  border-radius: 24px;
-  text-decoration: none;
-  font-size: 15px;
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease;
-  border: 1px solid rgba(0, 120, 212, 0.2);
-}
-
-.view-hot-search-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 120, 212, 0.2);
-  background: #f8f9fa;
-}
-
-.view-hot-search-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
 
 @media (max-width: 768px) {
   .title-gradient {
@@ -564,27 +764,37 @@ onBeforeUnmount(() => {
     font-size: 14px;
   }
 
-  .view-hot-search-btn {
-    padding: 14px 32px;
-    font-size: 15px;
+  .heat-icon {
+    width: 110px;
+    height: 110px;
+  }
+
+  .bubble-img {
+    width: 180px;
+  }
+
+  .bubble-text {
+    font-size: 17px;
   }
 }
 
 /* AI提问悬浮按钮容器 */
 .qna-fab-container {
   position: fixed;
-  bottom: 32px;
+  bottom: 100px;
   right: 32px;
   z-index: 1000;
+  cursor: move;
+  user-select: none;
 }
 
 .qna-fab {
-  width: 64px;
-  height: 64px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+  background: transparent;
   border: none;
-  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.4);
+  box-shadow: none;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
@@ -594,8 +804,8 @@ onBeforeUnmount(() => {
 }
 
 .qna-fab:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(14, 165, 233, 0.6);
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: none;
 }
 
 .qna-fab:active {
@@ -612,26 +822,28 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 76px;
   right: 0;
-  background: rgba(37, 99, 235, 0.95);
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 12px;
+  background: url('/static/icons/bubble.png') no-repeat center center;
+  background-size: contain;
+  background-color: transparent;
+  color: #ffb3d9;
+  padding: 16px 28px;
+  border-radius: 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+  box-shadow: none;
   animation: tooltipBounce 3s ease-in-out infinite;
   pointer-events: none;
   z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  min-width: 150px;
 }
 
 .qna-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 20px;
-  border: 6px solid transparent;
-  border-top-color: rgba(37, 99, 235, 0.95);
+  display: none;
 }
 
 @keyframes tooltipBounce {
@@ -646,9 +858,11 @@ onBeforeUnmount(() => {
   }
 }
 
-.fab-icon {
-  font-size: 32px;
+.fab-icon-img {
+  width: 82px;
+  height: 82px;
   animation: pulse 2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes pulse {

@@ -1,24 +1,46 @@
 <template>
   <div class="aggregate-card">
     <div class="card-header">
-      <h3 class="card-title">全平台聚合</h3>
+      <div class="dashboard-icon"></div>
       <div class="card-actions">
         <button
           ref="aiBtn"
           class="action-btn ai-btn"
+          :class="{ 'icon-thinking': currentIcon === 'thinking', 'icon-log': currentIcon === 'log' }"
+          :style="{ opacity: iconOpacity }"
           title="AI总结"
           @click.stop="handleAISummaryClick"
         >
-          🤖
+          AI
         </button>
-        <button class="action-btn" title="刷新" @click.stop="$emit('refresh')">↻</button>
-        <button class="action-btn" title="分享" @click.stop="handleShare">↑</button>
+        <button class="action-btn refresh-btn" title="刷新" @click.stop="$emit('refresh')">
+          <span class="refresh-icon">↻</span>
+        </button>
+        <button class="action-btn share-btn-icon" title="分享" @click.stop="handleShare"></button>
       </div>
     </div>
 
     <div class="card-content">
-      <!-- List or loading state -->
-      <div v-if="items.length > 0" class="hot-list">
+      <!-- Loading -->
+      <div v-if="loading" class="card-loading">
+        <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+        <p>加载中...</p>
+      </div>
+      
+      <!-- Error - Show loading instead -->
+      <div v-else-if="error" class="card-loading">
+        <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+        <p>加载中...</p>
+      </div>
+      
+      <!-- Empty - Show loading instead -->
+      <div v-else-if="items.length === 0" class="card-loading">
+        <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+        <p>加载中...</p>
+      </div>
+      
+      <!-- List -->
+      <div v-else class="hot-list">
         <div
           v-for="(item, index) in items"
           :key="item.id"
@@ -29,9 +51,11 @@
           <div class="item-content">
             <div class="item-title">{{ item.title }}</div>
             <div class="item-meta">
-              <span class="item-platform" :style="{ color: getPlatformColor(item.platform) }">
-                {{ getPlatformLabel(item.platform) }}
-              </span>
+              <img
+                :src="getPlatformIcon(item.platform)"
+                :alt="getPlatformLabel(item.platform)"
+                class="item-platform-icon"
+              />
               <span v-if="item.category" class="item-category">{{ getCategoryName(item.category) }}</span>
               <span
                 v-if="item.heat > 0"
@@ -47,15 +71,16 @@
     </div>
 
     <div v-if="showViewAll && items.length > 0" class="card-footer" @click="$emit('view-all')">
+      <img src="/static/icons/add.png" alt="查看全部" class="card-footer-icon" />
       <span>查看全部</span>
-      <span class="arrow">→</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { HotSearchItem, Platform } from '@/types'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import type { HotSearchItem } from '@/types'
+import { Platform } from '@/types'
 import { formatHeat, getHeatLevelClass } from '@/utils/formatHeat'
 import { getCategoryName } from '@/utils/categoryMapper'
 
@@ -73,12 +98,43 @@ const emit = defineEmits<{
 }>()
 
 const aiBtn = ref<HTMLElement | null>(null)
+const currentIcon = ref<'thinking' | 'log'>('thinking')
+const iconOpacity = ref(1)
+let iconTimer: ReturnType<typeof setInterval> | null = null
 
 const handleAISummaryClick = () => {
   if (aiBtn.value) {
     emit('ai-summary', aiBtn.value)
   }
 }
+
+const switchIcon = () => {
+  // 渐隐
+  iconOpacity.value = 0
+  setTimeout(() => {
+    // 切换图标
+    currentIcon.value = currentIcon.value === 'thinking' ? 'log' : 'thinking'
+    // 渐显
+    setTimeout(() => {
+      iconOpacity.value = 1
+    }, 50) // 短暂延迟确保图标切换完成
+  }, 800) // 渐隐动画时间，与CSS transition时间一致
+}
+
+onMounted(() => {
+  // 第一个图标显示5秒后开始切换
+  setTimeout(() => {
+    switchIcon()
+    // 之后每6.6秒切换一次（5秒显示 + 0.8秒渐隐 + 0.8秒渐显）
+    iconTimer = setInterval(switchIcon, 6600)
+  }, 5000)
+})
+
+onBeforeUnmount(() => {
+  if (iconTimer) {
+    clearInterval(iconTimer)
+  }
+})
 
 const getRankClass = (index: number) => {
   if (index === 0) return 'rank-1'
@@ -103,6 +159,16 @@ const getPlatformColor = (platform: Platform) => {
     [Platform.TOUTIAO]: '#FF4757',
     [Platform.BILIBILI]: '#64B5F6',  // 浅蓝色
     [Platform.DOUYIN]: '#000',
+  }
+  return map[platform]
+}
+
+const getPlatformIcon = (platform: Platform) => {
+  const map: Record<Platform, string> = {
+    [Platform.WEIBO]: '/static/icons/weibo.jpg',
+    [Platform.TOUTIAO]: '/static/icons/toutiao.png',
+    [Platform.BILIBILI]: '/static/icons/bilibili.png',
+    [Platform.DOUYIN]: '/static/icons/doyin.png',
   }
   return map[platform]
 }
@@ -140,10 +206,9 @@ const handleShare = async () => {
 
 <style scoped>
 .aggregate-card {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
+  border: none;
   border-radius: 28px;
   box-shadow: 0 12px 48px rgba(102, 126, 234, 0.25);
   overflow: hidden;
@@ -154,46 +219,44 @@ const handleShare = async () => {
 }
 
 .aggregate-card:hover {
-  background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 16px 64px rgba(102, 126, 234, 0.35);
   transform: translateY(-6px);
+  filter: brightness(1.02);
 }
 
 .card-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 14px 18px;
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 100%);
-  backdrop-filter: blur(15px);
   border-bottom: 2px solid rgba(102, 126, 234, 0.2);
 }
 
-.card-title {
-  font-size: 17px;
-  font-weight: 900;
-  margin: 0;
-  flex: 1;
-  color: #1a1a1a;
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
-  letter-spacing: 0.5px;
+.dashboard-icon {
+  width: 100px;
+  height: 40px;
+  background: url('/static/icons/main.png') no-repeat left center;
+  background-size: contain;
+  flex-shrink: 0;
 }
 
 .card-actions {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   align-items: center;
 }
 
 .action-btn {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: rgba(255, 255, 255, 0.6);
   color: #555;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: bold;
   display: flex;
   align-items: center;
@@ -210,14 +273,85 @@ const handleShare = async () => {
 }
 
 .action-btn.ai-btn {
-  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
-  color: #fff;
-  font-size: 13px;
+  background-color: transparent;
+  color: transparent;
+  font-size: 0;
+  width: 44px;
+  height: 44px;
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+}
+
+.action-btn.ai-btn.icon-thinking {
+  background: url('/static/icons/thinking.png') no-repeat center center;
+  background-size: 34px 34px;
+}
+
+.action-btn.ai-btn.icon-log {
+  background: url('/static/icons/log.png') no-repeat center center;
+  background-size: 34px 34px;
 }
 
 .action-btn.ai-btn:hover {
-  background: linear-gradient(135deg, #0284c7 0%, #1d4ed8 100%);
-  color: #fff;
+  background-color: transparent;
+  background-size: 36px 36px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  transform: scale(1.1);
+}
+
+.refresh-btn {
+  background: url('/static/icons/gold banner2.png') no-repeat center center !important;
+  background-size: 100% 100% !important;
+  background-color: transparent !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  color: #ffffff !important;
+}
+
+.refresh-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px) scale(1.1);
+  background: url('/static/icons/gold banner2.png') no-repeat center center !important;
+  background-size: 100% 100% !important;
+}
+
+.refresh-btn:active {
+  transform: translateY(0);
+}
+
+.refresh-icon {
+  font-size: 18px;
+  color: #ffffff;
+  font-weight: bold;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.share-btn-icon {
+  background: transparent !important;
+  background-image: url('/static/icons/share.png') !important;
+  background-repeat: no-repeat !important;
+  background-position: center center !important;
+  background-size: 30px 30px !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.share-btn-icon:hover {
+  background-color: transparent !important;
+  background-image: url('/static/icons/share.png') !important;
 }
 
 .card-content {
@@ -266,6 +400,13 @@ const handleShare = async () => {
   font-weight: 500;
 }
 
+.loading-gif {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 16px;
+  object-fit: contain;
+}
+
 .loading-spinner {
   width: 56px;
   height: 56px;
@@ -286,14 +427,14 @@ const handleShare = async () => {
 }
 
 .hot-list {
-  padding: 8px 0;
+  padding: 2px 0;
 }
 
 .hot-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 20px;
+  padding: 8px 20px;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
@@ -367,13 +508,14 @@ const handleShare = async () => {
 }
 
 .item-title {
-  font-size: 14px;
+  font-size: 15px;
   color: #1a1a1a;
   line-height: 1.5;
   margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   font-weight: 600;
@@ -383,17 +525,16 @@ const handleShare = async () => {
 .item-meta {
   display: flex;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.item-platform {
-  font-weight: 700;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  border: 1.5px solid currentColor;
+.item-platform-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 4px;
 }
 
 .item-category {
@@ -404,7 +545,7 @@ const handleShare = async () => {
 }
 
 .item-heat {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
@@ -434,30 +575,45 @@ const handleShare = async () => {
 }
 
 .card-footer {
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.3);
-  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 6px 12px;
+  background: transparent;
+  border-top: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   cursor: pointer;
-  color: #2c3e50;
-  font-size: 13px;
-  font-weight: 600;
+  color: #1f2933;
+  font-size: 14px;
+  font-weight: 700;
   transition: all 0.3s ease;
+  margin: 6px auto;
+  border-radius: 18px;
+  box-shadow: none;
+  animation: strongPulse 2.5s ease-in-out infinite;
 }
 
 .card-footer:hover {
-  background: rgba(255, 255, 255, 0.5);
-  color: #1a252f;
+  background: transparent;
+  color: #0f172a;
+  transform: translateY(-2px);
+  box-shadow: none;
+  animation: none;
 }
 
-.arrow {
-  transition: transform 0.3s ease;
+@keyframes strongPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.94);
+  }
 }
 
-.card-footer:hover .arrow {
-  transform: translateX(4px);
+.card-footer-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
 }
 </style>

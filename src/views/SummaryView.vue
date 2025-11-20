@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAIStore } from '@/stores/ai'
 import { ElMessage } from 'element-plus'
+import QNAPanel from '@/components/QNAPanel.vue'
 
 const aiStore = useAIStore()
 
@@ -31,163 +32,322 @@ const getHeatLevelLabel = (level: string) => {
   }
   return map[level] || level
 }
+
+// QNA面板
+const qnaPanelVisible = ref(false)
+
+// QNA按钮拖动
+const qnaFabPosition = ref({ x: 0, y: 0 })
+const isDragging = ref(false)
+const dragStart = ref({ x: 0, y: 0 })
+const hasDragged = ref(false)
+const showQnaTooltip = ref(true)
+let tooltipHideTimer: number | null = null
+
+const handleQnaMouseDown = (e: MouseEvent) => {
+  isDragging.value = true
+  hasDragged.value = false
+  dragStart.value = { x: e.clientX - qnaFabPosition.value.x, y: e.clientY - qnaFabPosition.value.y }
+  document.addEventListener('mousemove', handleQnaMouseMove)
+  document.addEventListener('mouseup', handleQnaMouseUp)
+}
+
+const handleQnaMouseMove = (e: MouseEvent) => {
+  if (isDragging.value) {
+    hasDragged.value = true
+    qnaFabPosition.value = {
+      x: e.clientX - dragStart.value.x,
+      y: e.clientY - dragStart.value.y,
+    }
+  }
+}
+
+const handleQnaMouseUp = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleQnaMouseMove)
+  document.removeEventListener('mouseup', handleQnaMouseUp)
+}
+
+const handleQnaClick = () => {
+  // 只有在没有拖动的情况下才切换面板
+  if (!hasDragged.value) {
+    qnaPanelVisible.value = !qnaPanelVisible.value
+    hideTooltipTemporarily()
+  }
+}
+
+const handleQnaMouseEnter = () => {
+  hideTooltipTemporarily()
+}
+
+const hideTooltipTemporarily = () => {
+  showQnaTooltip.value = false
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+  }
+  tooltipHideTimer = window.setTimeout(() => {
+    showQnaTooltip.value = true
+  }, 10000)
+}
 </script>
 
 <template>
-  <div class="summary-container">
-    <div class="header">
-      <h1>趋势总结</h1>
-      <el-button type="primary" @click="handleRefresh" :loading="aiStore.loading"> 刷新 </el-button>
+  <div class="summary-page">
+    <div class="animated-overlay"></div>
+    <div class="summary-container">
+      <div class="header">
+        <h1>趋势总结</h1>
+        <el-button type="primary" @click="handleRefresh" :loading="aiStore.loading">
+          刷新
+        </el-button>
+      </div>
+
+      <el-alert
+        v-if="aiStore.error"
+        :title="aiStore.error"
+        type="error"
+        closable
+        style="margin-bottom: 16px"
+      />
+
+      <el-skeleton :loading="aiStore.loading" animated>
+        <template v-if="aiStore.summary">
+          <!-- 全局总结 -->
+          <el-card class="summary-card">
+            <template #header>
+              <div class="card-header">
+                <span>全局趋势分析</span>
+              </div>
+            </template>
+            <p class="summary-text">{{ aiStore.summary.summary }}</p>
+          </el-card>
+
+          <!-- 核心话题 -->
+          <el-card class="summary-card">
+            <template #header>
+              <div class="card-header">
+                <span>核心话题</span>
+              </div>
+            </template>
+            <div class="topics-grid">
+              <div
+                v-for="(topic, index) in aiStore.summary.coreTopics"
+                :key="index"
+                class="topic-item"
+              >
+                <div class="topic-header">
+                  <h3>{{ topic.topic }}</h3>
+                  <el-tag
+                    :style="{ backgroundColor: getHeatLevelColor(topic.heatLevel) }"
+                    style="color: #fff"
+                  >
+                    {{ getHeatLevelLabel(topic.heatLevel) }}
+                  </el-tag>
+                </div>
+                <p class="topic-description">{{ topic.description }}</p>
+                <div class="topic-platforms">
+                  <el-tag v-for="platform in topic.platforms" :key="platform" type="info">
+                    {{ platform }}
+                  </el-tag>
+                </div>
+              </div>
+            </div>
+          </el-card>
+
+          <!-- 平台分析 -->
+          <el-card class="summary-card">
+            <template #header>
+              <div class="card-header">
+                <span>平台分析</span>
+              </div>
+            </template>
+            <el-tabs>
+              <el-tab-pane v-if="aiStore.summary.platformAnalysis.weibo" label="微博">
+                <div class="platform-analysis">
+                  <p>
+                    <strong>特征：</strong
+                    >{{ aiStore.summary.platformAnalysis.weibo.characteristic }}
+                  </p>
+                  <p><strong>总结：</strong>{{ aiStore.summary.platformAnalysis.weibo.summary }}</p>
+                  <div class="top-items">
+                    <div
+                      v-for="item in aiStore.summary.platformAnalysis.weibo.topItems"
+                      :key="item.rank"
+                      class="top-item"
+                    >
+                      <span class="rank">{{ item.rank }}</span>
+                      <span class="title">{{ item.title }}</span>
+                      <span class="heat">{{ item.heatValue }}</span>
+                      <el-tag type="success">{{ item.trend }}</el-tag>
+                    </div>
+                  </div>
+                </div>
+              </el-tab-pane>
+              <el-tab-pane v-if="aiStore.summary.platformAnalysis.TOUTIAO" label="今日头条">
+                <div class="platform-analysis">
+                  <p>
+                    <strong>特征：</strong
+                    >{{ aiStore.summary.platformAnalysis.TOUTIAO.characteristic }}
+                  </p>
+                  <p>
+                    <strong>总结：</strong>{{ aiStore.summary.platformAnalysis.TOUTIAO.summary }}
+                  </p>
+                  <div class="top-items">
+                    <div
+                      v-for="item in aiStore.summary.platformAnalysis.TOUTIAO.topItems"
+                      :key="item.rank"
+                      class="top-item"
+                    >
+                      <span class="rank">{{ item.rank }}</span>
+                      <span class="title">{{ item.title }}</span>
+                      <span class="heat">{{ item.heatValue }}</span>
+                      <el-tag type="success">{{ item.trend }}</el-tag>
+                    </div>
+                  </div>
+                </div>
+              </el-tab-pane>
+              <el-tab-pane v-if="aiStore.summary.platformAnalysis.bilibili" label="B站">
+                <div class="platform-analysis">
+                  <p>
+                    <strong>特征：</strong
+                    >{{ aiStore.summary.platformAnalysis.bilibili.characteristic }}
+                  </p>
+                  <p>
+                    <strong>总结：</strong>{{ aiStore.summary.platformAnalysis.bilibili.summary }}
+                  </p>
+                  <div class="top-items">
+                    <div
+                      v-for="item in aiStore.summary.platformAnalysis.bilibili.topItems"
+                      :key="item.rank"
+                      class="top-item"
+                    >
+                      <span class="rank">{{ item.rank }}</span>
+                      <span class="title">{{ item.title }}</span>
+                      <span class="heat">{{ item.heatValue }}</span>
+                      <el-tag type="success">{{ item.trend }}</el-tag>
+                    </div>
+                  </div>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </el-card>
+
+          <!-- 跨平台洞察 -->
+          <el-card class="summary-card">
+            <template #header>
+              <div class="card-header">
+                <span>跨平台洞察</span>
+              </div>
+            </template>
+            <ul class="insights-list">
+              <li v-for="(insight, index) in aiStore.summary.crossPlatformInsights" :key="index">
+                {{ insight }}
+              </li>
+            </ul>
+          </el-card>
+        </template>
+      </el-skeleton>
     </div>
 
-    <el-alert
-      v-if="aiStore.error"
-      :title="aiStore.error"
-      type="error"
-      closable
-      style="margin-bottom: 16px"
-    />
+    <!-- AI提问悬浮按钮 -->
+    <div
+      class="qna-fab-container"
+      :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
+      @mousedown="handleQnaMouseDown"
+      @mouseenter="handleQnaMouseEnter"
+    >
+      <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
+        <img src="/static/icons/thinking.png" alt="AI" class="fab-icon-img" />
+      </button>
+      <div v-if="showQnaTooltip" class="qna-tooltip">有什么问题都可以点我哦</div>
+    </div>
 
-    <el-skeleton :loading="aiStore.loading" animated>
-      <template v-if="aiStore.summary">
-        <!-- 全局总结 -->
-        <el-card class="summary-card">
-          <template #header>
-            <div class="card-header">
-              <span>全局趋势分析</span>
-            </div>
-          </template>
-          <p class="summary-text">{{ aiStore.summary.summary }}</p>
-        </el-card>
-
-        <!-- 核心话题 -->
-        <el-card class="summary-card">
-          <template #header>
-            <div class="card-header">
-              <span>核心话题</span>
-            </div>
-          </template>
-          <div class="topics-grid">
-            <div
-              v-for="(topic, index) in aiStore.summary.coreTopics"
-              :key="index"
-              class="topic-item"
-            >
-              <div class="topic-header">
-                <h3>{{ topic.topic }}</h3>
-                <el-tag
-                  :style="{ backgroundColor: getHeatLevelColor(topic.heatLevel) }"
-                  style="color: #fff"
-                >
-                  {{ getHeatLevelLabel(topic.heatLevel) }}
-                </el-tag>
-              </div>
-              <p class="topic-description">{{ topic.description }}</p>
-              <div class="topic-platforms">
-                <el-tag v-for="platform in topic.platforms" :key="platform" type="info">
-                  {{ platform }}
-                </el-tag>
-              </div>
-            </div>
-          </div>
-        </el-card>
-
-        <!-- 平台分析 -->
-        <el-card class="summary-card">
-          <template #header>
-            <div class="card-header">
-              <span>平台分析</span>
-            </div>
-          </template>
-          <el-tabs>
-            <el-tab-pane v-if="aiStore.summary.platformAnalysis.weibo" label="微博">
-              <div class="platform-analysis">
-                <p>
-                  <strong>特征：</strong>{{ aiStore.summary.platformAnalysis.weibo.characteristic }}
-                </p>
-                <p><strong>总结：</strong>{{ aiStore.summary.platformAnalysis.weibo.summary }}</p>
-                <div class="top-items">
-                  <div
-                    v-for="item in aiStore.summary.platformAnalysis.weibo.topItems"
-                    :key="item.rank"
-                    class="top-item"
-                  >
-                    <span class="rank">{{ item.rank }}</span>
-                    <span class="title">{{ item.title }}</span>
-                    <span class="heat">{{ item.heatValue }}</span>
-                    <el-tag type="success">{{ item.trend }}</el-tag>
-                  </div>
-                </div>
-              </div>
-            </el-tab-pane>
-            <el-tab-pane v-if="aiStore.summary.platformAnalysis.TOUTIAO" label="今日头条">
-              <div class="platform-analysis">
-                <p>
-                  <strong>特征：</strong
-                  >{{ aiStore.summary.platformAnalysis.TOUTIAO.characteristic }}
-                </p>
-                <p><strong>总结：</strong>{{ aiStore.summary.platformAnalysis.TOUTIAO.summary }}</p>
-                <div class="top-items">
-                  <div
-                    v-for="item in aiStore.summary.platformAnalysis.TOUTIAO.topItems"
-                    :key="item.rank"
-                    class="top-item"
-                  >
-                    <span class="rank">{{ item.rank }}</span>
-                    <span class="title">{{ item.title }}</span>
-                    <span class="heat">{{ item.heatValue }}</span>
-                    <el-tag type="success">{{ item.trend }}</el-tag>
-                  </div>
-                </div>
-              </div>
-            </el-tab-pane>
-            <el-tab-pane v-if="aiStore.summary.platformAnalysis.bilibili" label="B站">
-              <div class="platform-analysis">
-                <p>
-                  <strong>特征：</strong
-                  >{{ aiStore.summary.platformAnalysis.bilibili.characteristic }}
-                </p>
-                <p>
-                  <strong>总结：</strong>{{ aiStore.summary.platformAnalysis.bilibili.summary }}
-                </p>
-                <div class="top-items">
-                  <div
-                    v-for="item in aiStore.summary.platformAnalysis.bilibili.topItems"
-                    :key="item.rank"
-                    class="top-item"
-                  >
-                    <span class="rank">{{ item.rank }}</span>
-                    <span class="title">{{ item.title }}</span>
-                    <span class="heat">{{ item.heatValue }}</span>
-                    <el-tag type="success">{{ item.trend }}</el-tag>
-                  </div>
-                </div>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
-        </el-card>
-
-        <!-- 跨平台洞察 -->
-        <el-card class="summary-card">
-          <template #header>
-            <div class="card-header">
-              <span>跨平台洞察</span>
-            </div>
-          </template>
-          <ul class="insights-list">
-            <li v-for="(insight, index) in aiStore.summary.crossPlatformInsights" :key="index">
-              {{ insight }}
-            </li>
-          </ul>
-        </el-card>
-      </template>
-    </el-skeleton>
+    <!-- QNA面板 -->
+    <QNAPanel :visible="qnaPanelVisible" @close="qnaPanelVisible = false" />
   </div>
 </template>
 
 <style scoped lang="css">
+.summary-page {
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  background: url('/static/images/background2.jpg') no-repeat center center;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+.animated-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+
+/* 左上角阳光效果 */
+.animated-overlay::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.35) 15%,
+    rgba(255, 255, 255, 0.25) 30%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.08) 60%,
+    transparent 80%
+  );
+  filter: blur(45px);
+  animation: sunGlow 8s ease-in-out infinite;
+}
+
+/* 流动光效 */
+.animated-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
+  animation: sunGlow 8s ease-in-out infinite;
+  pointer-events: none;
+  filter: blur(35px);
+}
+
+@keyframes sunGlow {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes flowingLight {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(50%);
+  }
+}
+
 .summary-container {
   padding: 20px;
+  position: relative;
+  z-index: 2;
 }
 
 .header {
@@ -200,6 +360,19 @@ const getHeatLevelLabel = (level: string) => {
 .header h1 {
   margin: 0;
   font-size: 24px;
+}
+
+.header :deep(.el-button) {
+  background: url('/static/icons/gold banner2.png') no-repeat center center !important;
+  background-size: 100% 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  padding: 10px 28px !important;
+  min-height: 42px !important;
+  font-size: 15px !important;
 }
 
 .summary-card {
@@ -318,4 +491,108 @@ const getHeatLevelLabel = (level: string) => {
   border-left: 3px solid #409eff;
   border-radius: 2px;
 }
+
+/* AI提问悬浮按钮容器 */
+.qna-fab-container {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  z-index: 1000;
+  cursor: move;
+  user-select: none;
+}
+
+.qna-fab {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.qna-fab:hover {
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: none;
+}
+
+.qna-fab:active {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.qna-fab:hover + .qna-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.qna-tooltip {
+  position: absolute;
+  bottom: 76px;
+  right: 0;
+  background: url('/static/icons/bubble.png') no-repeat center center;
+  background-size: contain;
+  background-color: transparent;
+  color: #ffb3d9;
+  padding: 16px 28px;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: none;
+  animation: tooltipBounce 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  min-width: 150px;
+  opacity: 1;
+  visibility: visible;
+}
+
+.qna-tooltip::after {
+  display: none;
+}
+
+@keyframes tooltipBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-5px);
+    opacity: 0.9;
+  }
+}
+
+.qna-fab:hover + .qna-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.fab-icon-img {
+  width: 82px;
+  height: 82px;
+  animation: pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
 </style>
+

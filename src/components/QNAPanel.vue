@@ -5,18 +5,16 @@
         <div class="qna-panel" :style="panelStyle" @mousedown="handleMouseDown" @click.stop>
           <!-- Header -->
           <div class="panel-header" style="cursor: grab">
-            <h2 class="panel-title">
-              <span class="ai-icon">🤖</span>
-              AI 智能问答
-            </h2>
+            <div class="header-left">
+              <img src="/static/icons/dashboard.png" alt="dashboard" class="header-icon" />
+            </div>
             <button class="panel-close" @click="$emit('close')">✕</button>
           </div>
 
           <!-- Chat History -->
           <div class="chat-container" ref="chatContainerRef">
             <div v-if="chatHistory.length === 0" class="empty-state">
-              <div class="empty-icon">💬</div>
-              <p>向AI提问关于热搜的任何问题</p>
+              <img src="/static/icons/heat.png" alt="heat" class="empty-icon" />
               <div class="example-questions">
                 <button
                   v-for="(example, index) in exampleQuestions"
@@ -33,7 +31,7 @@
               <div v-for="(chat, index) in chatHistory" :key="index" class="chat-item">
                 <!-- User Question -->
                 <div class="message user-message">
-                  <div class="message-avatar">👤</div>
+                  <div class="message-avatar user-avatar">用户</div>
                   <div class="message-content">
                     <div class="message-text">{{ chat.question }}</div>
                     <div v-if="chat.platformFilter" class="message-meta">
@@ -44,7 +42,7 @@
 
                 <!-- AI Answer -->
                 <div class="message ai-message">
-                  <div class="message-avatar">🤖</div>
+                  <div class="message-avatar ai-avatar">AI</div>
                   <div class="message-content">
                     <div v-if="chat.loading" class="loading-state">
                       <div class="typing-indicator">
@@ -97,7 +95,8 @@
                 :key="option.value"
                 class="filter-btn"
                 :class="{ active: selectedPlatform === option.value }"
-                @click="selectedPlatform = option.value"
+                :style="getFilterStyle(option.value as Platform | '')"
+                @click="selectedPlatform = (option.value as Platform | '')"
               >
                 {{ option.label }}
               </button>
@@ -107,16 +106,53 @@
                 v-model="question"
                 type="text"
                 class="question-input"
-                placeholder="输入你的问题..."
+                placeholder="请输入你的问题..."
                 @keyup.enter="handleAskQuestion"
+                @input="handleSearchInput"
+                @focus="showSuggestions = true"
                 :disabled="isAsking"
               />
+              <!-- 搜索建议下拉框 -->
+              <div
+                v-if="showSuggestions && question && searchSuggestions.length > 0"
+                class="suggestions-dropdown"
+              >
+                <div
+                  v-for="(suggestion, index) in searchSuggestions"
+                  :key="index"
+                  class="suggestion-item"
+                  @click="handleSearchSuggestion(suggestion)"
+                >
+                  {{ suggestion }}
+                </div>
+              </div>
+              <button class="voice-btn" title="语音输入" @click.stop>
+                <svg class="voice-icon" width="18" height="18" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M8 11C9.65685 11 11 9.65685 11 8V3C11 1.34315 9.65685 0 8 0C6.34315 0 5 1.34315 5 3V8C5 9.65685 6.34315 11 8 11Z"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  />
+                  <path
+                    d="M3 8C3 10.7614 5.23858 13 8 13C10.7614 13 13 10.7614 13 8"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M8 13V16"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
               <button
                 class="send-btn"
                 @click="handleAskQuestion"
                 :disabled="!question.trim() || isAsking"
               >
-                <span v-if="!isAsking">发送</span>
+                <span v-if="!isAsking" class="arrow-icon">↑</span>
                 <span v-else class="loading-spinner"></span>
               </button>
             </div>
@@ -129,7 +165,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick, computed, watch, onBeforeUnmount } from 'vue'
-import { Platform, QNARequest } from '@/types'
+import { Platform } from '@/types'
+import type { QNARequest } from '@/types'
 import aiApi from '@/api/ai'
 
 const props = defineProps<{
@@ -214,6 +251,10 @@ const selectedPlatform = ref<Platform | ''>('')
 const chatHistory = ref<ChatItem[]>([])
 const chatContainerRef = ref<HTMLElement | null>(null)
 const isAsking = ref(false)
+const showSuggestions = ref(false)
+const searchSuggestions = ref<string[]>([])
+const loadingSuggestions = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const platformOptions = [
   { label: '全部平台', value: '' },
@@ -223,7 +264,22 @@ const platformOptions = [
   { label: '抖音', value: Platform.DOUYIN },
 ]
 
-const exampleQuestions = ['今天有什么热门话题?', '娱乐圈最近有什么新闻?', '科技领域有哪些热点?']
+const getFilterIcon = (value: Platform | '') => {
+  if (!value) return '/static/icons/dashboard.png'
+  const map: Record<Platform, string> = {
+    [Platform.WEIBO]: '/static/icons/weibo.jpg',
+    [Platform.TOUTIAO]: '/static/icons/toutiao.png',
+    [Platform.BILIBILI]: '/static/icons/bilibili.png',
+    [Platform.DOUYIN]: '/static/icons/doyin.png',
+  }
+  return map[value]
+}
+
+const getFilterStyle = (value: Platform | '') => ({
+  '--option-icon': `url(${getFilterIcon(value)})`,
+})
+
+const exampleQuestions = ['今天有什么热门话题？', '最近世界局势如何？', '最近有什么热梗？']
 
 const getPlatformLabel = (platform: Platform) => {
   const map: Record<Platform, string> = {
@@ -286,6 +342,8 @@ const handleAskQuestion = async () => {
 
 const retryQuestion = async (index: number) => {
   const chatItem = chatHistory.value[index]
+  if (!chatItem) return
+  
   chatItem.loading = true
   chatItem.error = undefined
 
@@ -306,6 +364,72 @@ const retryQuestion = async (index: number) => {
     chatItem.error = 'AI回答失败，请稍后重试'
   }
 }
+
+const handleSearchInput = () => {
+  if (!question.value.trim()) {
+    showSuggestions.value = false
+    searchSuggestions.value = []
+    return
+  }
+
+  showSuggestions.value = true
+
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
+
+  // 轻量防抖，30ms 后请求，尽量提升联想速度
+  searchTimer = setTimeout(async () => {
+    loadingSuggestions.value = true
+    try {
+      const query = question.value.trim()
+      const callbackName = `baiduSuggestion_${Date.now()}`
+
+      ;(window as any)[callbackName] = (data: any) => {
+        try {
+          if (data && data.s && Array.isArray(data.s)) {
+            searchSuggestions.value = data.s.slice(0, 4)
+          } else {
+            searchSuggestions.value = []
+          }
+        } catch (e) {
+          console.error('解析建议失败:', e)
+          searchSuggestions.value = []
+        }
+        loadingSuggestions.value = false
+        delete (window as any)[callbackName]
+      }
+
+      const script = document.createElement('script')
+      script.src = `https://suggestion.baidu.com/su?wd=${encodeURIComponent(query)}&cb=${callbackName}`
+
+      script.onerror = () => {
+        searchSuggestions.value = []
+        loadingSuggestions.value = false
+        delete (window as any)[callbackName]
+      }
+
+      document.head.appendChild(script)
+
+      setTimeout(() => {
+        loadingSuggestions.value = false
+        if (document.head.contains(script)) {
+          document.head.removeChild(script)
+        }
+        delete (window as any)[callbackName]
+      }, 3000)
+    } catch (error) {
+      console.error('获取搜索建议失败:', error)
+      searchSuggestions.value = []
+      loadingSuggestions.value = false
+    }
+  }, 30)
+}
+
+const handleSearchSuggestion = (suggestion: string) => {
+  question.value = suggestion
+  showSuggestions.value = false
+}
 </script>
 
 <style scoped>
@@ -323,10 +447,12 @@ const retryQuestion = async (index: number) => {
 }
 
 .qna-panel {
-  background: #fff;
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
   border-radius: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  width: 600px;
+  width: 90vw;
+  max-width: 550px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -341,50 +467,50 @@ const retryQuestion = async (index: number) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px 32px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 16px 24px;
+  border-bottom: none;
+  background: transparent;
 }
 
-.panel-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #ffffff;
+.header-left {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.ai-icon {
-  font-size: 28px;
+.header-icon {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
 }
 
 .panel-close {
   width: 36px;
   height: 36px;
   border: none;
-  background: rgba(255, 255, 255, 0.3);
+  background: transparent;
   border-radius: 50%;
   font-size: 20px;
-  color: #fff;
+  color: #555;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.6;
 }
 
 .panel-close:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.08);
   transform: rotate(90deg);
+  opacity: 1;
 }
 
 .chat-container {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  background: #f8f9fa;
+  background: transparent;
 }
 
 .chat-container::-webkit-scrollbar {
@@ -405,38 +531,50 @@ const retryQuestion = async (index: number) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
+  min-height: 360px;
   color: #999;
   text-align: center;
+  padding-top: 12px;
 }
 
 .empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+  margin-bottom: 24px;
 }
 
 .example-questions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 16px;
+  margin-top: -24px;
 }
 
 .example-btn {
-  padding: 12px 24px;
-  background: #fff;
-  border: 2px solid #667eea;
-  border-radius: 20px;
-  color: #667eea;
-  font-size: 14px;
+  padding: 16px 28px;
+  background: url('/static/icons/banner2.png') no-repeat center center;
+  background-size: 100% 100%;
+  border: none;
+  border-radius: 24px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+  word-wrap: break-word;
+  line-height: 1.4;
 }
 
 .example-btn:hover {
-  background: #667eea;
-  color: #fff;
   transform: translateY(-2px);
+  filter: brightness(1.05);
 }
 
 .chat-history {
@@ -480,7 +618,7 @@ const retryQuestion = async (index: number) => {
 
 .message-content {
   flex: 1;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -620,9 +758,9 @@ const retryQuestion = async (index: number) => {
 }
 
 .input-area {
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: none;
   padding: 20px;
-  background: #fff;
+  background: transparent;
 }
 
 .platform-filter {
@@ -633,43 +771,99 @@ const retryQuestion = async (index: number) => {
 }
 
 .filter-btn {
-  padding: 8px 16px;
-  background: #f0f0f0;
+  padding: 10px 26px;
+  background: transparent !important;
   border: none;
-  border-radius: 16px;
+  border-radius: 999px;
   font-size: 13px;
-  color: #666;
+  color: #ffffff;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  overflow: visible;
+}
+
+.filter-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/static/icons/circular bubble.png') no-repeat center center;
+  background-size: 100% 100%;
+  z-index: -1;
+  transition: all 0.3s ease;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.filter-btn::after {
+  content: '';
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  width: 48px;
+  height: 48px;
+  background-image: var(--option-icon);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  transform: translate(-50%, 10px) scale(0.85);
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
 }
 
 .filter-btn.active {
-  background: #667eea;
-  color: #fff;
+  background: transparent !important;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.filter-btn.active::before {
+  background: url('/static/icons/long banner.png') no-repeat center center;
+  background-size: 100% 100%;
+  transform: scaleX(1.08);
+  filter: brightness(1);
 }
 
 .filter-btn:hover:not(.active) {
-  background: #e0e0e0;
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+
+.filter-btn:hover::after {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
 }
 
 .input-wrapper {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
 .question-input {
   flex: 1;
-  padding: 14px 20px;
-  border: 2px solid #e0e0e0;
+  padding: 12px 20px;
+  border: none;
   border-radius: 24px;
   font-size: 15px;
   outline: none;
   transition: all 0.3s ease;
+  background: url('/static/icons/banner.png') no-repeat center center;
+  background-size: 100% 100%;
+  color: #333;
 }
 
 .question-input:focus {
-  border-color: #667eea;
+  background: url('/static/icons/banner.png') no-repeat center center;
+  background-size: 100% 100%;
 }
 
 .question-input:disabled {
@@ -677,27 +871,104 @@ const retryQuestion = async (index: number) => {
   cursor: not-allowed;
 }
 
-.send-btn {
-  padding: 14px 28px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 24px;
+.suggestions-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 8px;
+}
+
+.suggestion-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
   font-size: 15px;
+  color: #333;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background: #f5f7ff;
+  color: #667eea;
+}
+
+.voice-btn {
+  width: 50px;
+  height: 50px;
+  border: none;
+  background: url('/static/icons/circular bubble.png') no-repeat center center;
+  background-size: 100% 100%;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.voice-btn:hover {
+  transform: scale(1.1);
+  filter: brightness(1.1);
+}
+
+.voice-icon {
+  width: 20px;
+  height: 20px;
+  color: #ffffff;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+.send-btn {
+  padding: 0;
+  background: url('/static/icons/circular bubble.png') no-repeat center center;
+  background-size: 100% 100%;
+  color: #ffffff;
+  border: none;
+  border-radius: 50%;
+  font-size: 18px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  min-width: 80px;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5568d3 0%, #6a3f8c 100%);
-  transform: translateY(-2px);
+  transform: scale(1.1);
+  filter: brightness(1.1);
 }
 
 .send-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.arrow-icon {
+  font-size: 24px;
+  line-height: 1;
+  color: #ffffff;
+  opacity: 1;
+  font-weight: bold;
 }
 
 .send-btn .loading-spinner {
@@ -705,9 +976,10 @@ const retryQuestion = async (index: number) => {
   width: 16px;
   height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border-top-color: #ffffff;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  opacity: 0.9;
 }
 
 @keyframes spin {
@@ -770,6 +1042,18 @@ const retryQuestion = async (index: number) => {
   to {
     transform: translate(calc(50vw - 50% - 32px), calc(50vh - 50% + 32px)) scale(0);
     border-radius: 50%;
+  }
+}
+
+@keyframes glow-pulse {
+  0% {
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 255, 255, 0.6), 0 0 50px rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 255, 255, 0.3);
   }
 }
 
