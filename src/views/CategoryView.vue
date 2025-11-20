@@ -1,6 +1,5 @@
 <template>
   <div class="category-page">
-    <div class="animated-overlay"></div>
     <Navbar />
 
     <main class="page-content">
@@ -10,7 +9,11 @@
 
       <!-- Category Icon -->
       <div class="category-icon-wrapper">
-        <img :src="`/static/icons/${getCategoryIconName(categoryInfo.id)}.png`" :alt="categoryInfo.name" class="category-icon" />
+        <img
+          :src="`/static/icons/${getCategoryIconName(categoryInfo.id)}.png`"
+          :alt="categoryInfo.name"
+          class="category-icon"
+        />
       </div>
 
       <!-- 排行榜 + AI总结按钮 -->
@@ -20,16 +23,27 @@
             <span class="last-update">更新于：{{ lastUpdateText }}前</span>
           </div>
           <div class="action-buttons">
-            <button class="refresh-btn" @click="handleManualRefresh" :disabled="loading" title="手动刷新">
-              <img v-if="loading" src="/static/icons/loading.gif" alt="加载中" class="loading-icon" />
+            <button
+              class="refresh-btn"
+              @click="handleManualRefresh"
+              :disabled="loading"
+              title="手动刷新"
+            >
+              <img
+                v-if="loading"
+                src="/static/icons/loading.gif"
+                alt="加载中"
+                class="loading-icon"
+              />
               <span v-else class="refresh-icon">↻</span>
               <span v-if="!loading" class="refresh-text">刷新</span>
             </button>
-            <button ref="aiBtn" class="ai-summary-btn" @click="toggleAISummary" :disabled="aiLoading">
-              <span class="btn-icon"></span>
-              <span class="btn-text">AI总结</span>
+            <button class="ai-summary-btn" @click="handleAISummary" :disabled="aiLoading">
+              <span class="btn-icon" :class="{ spinning: aiLoading }"></span>
+              <span class="btn-text">{{ aiLoading ? '生成中...' : 'AI总结' }}</span>
             </button>
           </div>
+          <p v-if="aiError" class="ai-error-text">{{ aiError }}</p>
         </div>
         <div class="ranking-section">
           <RankingList
@@ -42,17 +56,6 @@
         </div>
       </div>
 
-      <!-- AI总结弹窗 -->
-      <AISummaryPopover
-        :visible="showAISummary"
-        :title="`${categoryInfo.name}热搜AI总结`"
-        :summary="aiSummary"
-        :loading="aiLoading"
-        :error="aiError"
-        :trigger-element="aiBtn"
-        @close="showAISummary = false"
-        @retry="loadAISummary"
-      />
       <FullListModal
         :visible="fullListVisible"
         platform="CATEGORY"
@@ -66,8 +69,8 @@
     </main>
 
     <!-- AI提问悬浮按钮 -->
-    <div 
-      class="qna-fab-container" 
+    <div
+      class="qna-fab-container"
       :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
       @mousedown="handleQnaMouseDown"
       @mouseenter="handleQnaMouseEnter"
@@ -75,7 +78,9 @@
       <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
         <img src="/static/icons/thinking.png" alt="AI" class="fab-icon-img" />
       </button>
-      <div v-if="showQnaTooltip" class="qna-tooltip">{{ qnaPanelVisible ? '点我也可以关闭提问哦' : '有什么问题都可以点我哦' }}</div>
+      <div v-if="showQnaTooltip" class="qna-tooltip">
+        {{ qnaPanelVisible ? '点我也可以关闭提问哦' : '有什么问题都可以点我哦' }}
+      </div>
     </div>
 
     <!-- QNA面板 -->
@@ -90,17 +95,17 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
-import AnimatedBackground from '@/components/AnimatedBackground.vue'
 import RankingList from '@/components/RankingList.vue'
 import QNAPanel from '@/components/QNAPanel.vue'
-import AISummaryPopover from '@/components/AISummaryPopover.vue'
 import FullListModal from '@/components/FullListModal.vue'
 import Footer from '@/components/Footer.vue'
 import { CATEGORIES } from '@/constants/categories'
-import type { HotSearchItem, AISummary } from '@/types'
+import type { HotSearchItem } from '@/types'
 import hotSearchApi from '@/api/hotSearch'
 import aiApi from '@/api/ai'
 import { sortByAggregateScore } from '@/utils/aggregateRanking'
+import { pushSummaryToQnaPanel, startSummaryStream } from '@/utils/qnaSummary'
+import { failQnaStream } from '@/utils/qnaStream'
 
 const route = useRoute()
 const items = ref<HotSearchItem[]>([])
@@ -112,11 +117,8 @@ const lastUpdateTime = ref<Date | null>(null)
 const lastUpdateText = ref('未更新')
 
 // AI总结相关
-const aiSummary = ref<AISummary | null>(null)
 const aiLoading = ref(false)
 const aiError = ref('')
-const showAISummary = ref(false)
-const aiBtn = ref<HTMLElement | null>(null)
 const fullListVisible = ref(false)
 
 // QNA面板
@@ -143,7 +145,7 @@ const handleQnaMouseMove = (e: MouseEvent) => {
   if (!isDragging.value) return
   const nextPosition = {
     x: e.clientX - dragStart.value.x,
-    y: e.clientY - dragStart.value.y
+    y: e.clientY - dragStart.value.y,
   }
   const deltaX = nextPosition.x - qnaFabPosition.value.x
   const deltaY = nextPosition.y - qnaFabPosition.value.y
@@ -206,14 +208,14 @@ const categoryInfo = computed(() => {
 // 映射category id到图片文件名
 const getCategoryIconName = (categoryId: string): string => {
   const iconMap: Record<string, string> = {
-    'entertainment': 'reaction',
-    'tech': 'technology',
-    'economy': 'economics',
-    'politics': 'politics',
-    'culture': 'culture',
-    'sports': 'sports',
-    'society': 'society',
-    'military': 'military',
+    entertainment: 'reaction',
+    tech: 'technology',
+    economy: 'economics',
+    politics: 'politics',
+    culture: 'culture',
+    sports: 'sports',
+    society: 'society',
+    military: 'military',
   }
   return iconMap[categoryId] || categoryId
 }
@@ -241,15 +243,19 @@ const loadData = async (silent = false) => {
 
     // 过滤有效数据并使用聚合算法排序
     const filtered = uniqueItems.filter(
-      (item) => item.heat >= 0 && !item.title?.includes('【降级数据】') && item.title && item.title.trim().length > 0
+      (item) =>
+        item.heat >= 0 &&
+        !item.title?.includes('【降级数据】') &&
+        item.title &&
+        item.title.trim().length > 0,
     )
     // 使用聚合算法排序，考虑rank、热度、平台权重等综合因素
     items.value = sortByAggregateScore(filtered)
-    
+
     // 更新时间
     lastUpdateTime.value = new Date()
     updateRefreshText()
-    
+
     console.log(
       `✅ 加载${categoryId}分类数据成功，原始${response.length}条，去重后${uniqueItems.length}条，过滤后${filtered.length}条，已按热度排序`,
     )
@@ -282,29 +288,36 @@ const updateRefreshText = () => {
   }
 }
 
-const loadAISummary = async () => {
+const aiSummaryTitle = computed(() => `${categoryInfo.value.name}热搜AI总结`)
+
+const handleAISummary = async () => {
+  if (aiLoading.value) return
   aiLoading.value = true
   aiError.value = ''
-  aiSummary.value = null
+
+  qnaPanelVisible.value = true
+  hideTooltipTemporarily()
+  window.dispatchEvent(new CustomEvent('qna:force-scroll'))
+
+  const streamId = startSummaryStream(aiSummaryTitle.value, {
+    categoryId: categoryInfo.value.id,
+  })
 
   try {
-    const categoryName = route.meta.categoryName as string
-    // 使用分类总结API
     const response = await aiApi.getGlobalSummary()
-    aiSummary.value = response.data
+    const summary = response.data
+    if (summary) {
+      pushSummaryToQnaPanel(aiSummaryTitle.value, summary, { streamId })
+    } else {
+      aiError.value = '暂无有效总结'
+      failQnaStream(streamId, '暂无有效总结')
+    }
   } catch (err) {
     console.error('加载AI总结失败:', err)
     aiError.value = '获取AI总结失败，请稍后重试'
+    failQnaStream(streamId, '获取AI总结失败，请稍后重试')
   } finally {
     aiLoading.value = false
-  }
-}
-
-const toggleAISummary = () => {
-  showAISummary.value = !showAISummary.value
-  // 如果面板打开且还没有数据，加载AI总结
-  if (showAISummary.value && !aiSummary.value && !aiLoading.value) {
-    loadAISummary()
   }
 }
 
@@ -328,9 +341,6 @@ watch(
   () => route.meta.categoryName,
   (newCategory, oldCategory) => {
     if (newCategory && newCategory !== oldCategory) {
-      // 清空之前的AI总结
-      showAISummary.value = false
-      aiSummary.value = null
       aiError.value = ''
       fullListVisible.value = false
       // 重新加载数据
@@ -352,7 +362,7 @@ const startAutoRefresh = () => {
     console.log('🔄 后台自动刷新分类数据...')
     loadData(true) // silent模式，不显示loading
   }, 60000) // 60秒
-  
+
   // 每秒更新文本显示
   textUpdateTimer = setInterval(() => {
     updateRefreshText()
@@ -389,63 +399,7 @@ onBeforeUnmount(() => {
   padding-bottom: 60px;
 }
 
-.animated-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-
 /* 左上角阳光效果 */
-.animated-overlay::before {
-  content: '';
-  position: absolute;
-  top: -100px;
-  left: -100px;
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.35) 15%,
-    rgba(255, 255, 255, 0.25) 30%,
-    rgba(255, 255, 255, 0.15) 45%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 80%
-  );
-  filter: blur(45px);
-  animation: sunGlow 8s ease-in-out infinite;
-}
-
-/* 流动光效 */
-.animated-overlay::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
-  animation: sunGlow 8s ease-in-out infinite;
-  pointer-events: none;
-  filter: blur(35px);
-}
-
-@keyframes sunGlow {
-  0%, 100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.12);
-  }
-}
-
 
 .page-content {
   max-width: 1400px;
@@ -528,6 +482,12 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.ai-error-text {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #f56c6c;
 }
 
 .refresh-btn,
@@ -648,6 +608,10 @@ onBeforeUnmount(() => {
   font-size: 0;
 }
 
+.ai-summary-btn .btn-icon.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -716,7 +680,7 @@ onBeforeUnmount(() => {
   background-size: contain;
   background-color: transparent;
   color: #ffb3d9;
-  padding: 16px 28px;
+  padding: 20px 28px 16px;
   border-radius: 0;
   font-size: 13px;
   font-weight: 600;

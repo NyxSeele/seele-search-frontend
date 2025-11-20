@@ -4,7 +4,6 @@ import Navbar from '@/components/Navbar.vue'
 import HotSearchCard from '@/components/HotSearchCard.vue'
 import AggregateCard from '@/components/AggregateCard.vue'
 import FullListModal from '@/components/FullListModal.vue'
-import AISummaryPopover from '@/components/AISummaryPopover.vue'
 import QNAPanel from '@/components/QNAPanel.vue'
 import Footer from '@/components/Footer.vue'
 import { Platform } from '@/types'
@@ -12,6 +11,8 @@ import type { HotSearchItem, AISummary } from '@/types'
 import hotSearchApi from '@/api/hotSearch'
 import aiApi from '@/api/ai'
 import { sortByAggregateScore, sortWithPlatformBalance } from '@/utils/aggregateRanking'
+import { pushSummaryToQnaPanel, startSummaryStream } from '@/utils/qnaSummary'
+import { failQnaStream } from '@/utils/qnaStream'
 
 // 各平台数据
 const weiboItems = ref<HotSearchItem[]>([])
@@ -43,14 +44,6 @@ const modalItems = ref<HotSearchItem[]>([])
 const modalLoading = ref(false)
 const modalError = ref('')
 
-// AI总结弹窗
-const aiModalVisible = ref(false)
-const aiModalTitle = ref('')
-const aiSummary = ref<AISummary | null>(null)
-const aiLoading = ref(false)
-const aiError = ref('')
-const aiTriggerElement = ref<HTMLElement | null>(null)
-
 // QNA面板
 const qnaPanelVisible = ref(false)
 
@@ -63,6 +56,12 @@ const DRAG_THRESHOLD = 6
 const showQnaTooltip = ref(true)
 let tooltipHideTimer: number | null = null
 const platformRetryTimers: Partial<Record<Platform, ReturnType<typeof setTimeout> | null>> = {}
+const platformDisplayNames: Record<Platform, string> = {
+  [Platform.WEIBO]: '微博',
+  [Platform.TOUTIAO]: '今日头条',
+  [Platform.BILIBILI]: 'B站',
+  [Platform.DOUYIN]: '抖音',
+}
 
 const clearPlatformRetry = (platform: Platform) => {
   if (platformRetryTimers[platform]) {
@@ -135,6 +134,52 @@ const hideTooltipTemporarily = () => {
   tooltipHideTimer = window.setTimeout(() => {
     showQnaTooltip.value = true
   }, 10000)
+}
+
+const streamSummaryToQna = async (
+  fetcher: () => Promise<AISummary | null>,
+  title: string,
+  meta?: Record<string, any>,
+) => {
+  qnaPanelVisible.value = true
+  hideTooltipTemporarily()
+  window.dispatchEvent(new CustomEvent('qna:force-scroll'))
+
+  const streamId = startSummaryStream(title, meta)
+
+  try {
+    const summary = await fetcher()
+    if (summary) {
+      pushSummaryToQnaPanel(title, summary, { streamId })
+    } else {
+      failQnaStream(streamId, '暂无有效总结')
+    }
+  } catch (error) {
+    console.error(`获取${title}失败:`, error)
+    failQnaStream(streamId, '获取AI总结失败，请稍后重试')
+  }
+}
+
+const handleGlobalAISummary = () => {
+  streamSummaryToQna(
+    async () => {
+      const response = await aiApi.getGlobalSummary()
+      return response.data
+    },
+    '全平台热搜AI总结',
+    { scope: 'GLOBAL' },
+  )
+}
+
+const handlePlatformAISummary = (platform: Platform) => {
+  streamSummaryToQna(
+    async () => {
+      const response = await aiApi.getPlatformSummary(platform)
+      return response.data
+    },
+    `${platformDisplayNames[platform]}热搜AI总结`,
+    { platform },
+  )
 }
 
 // 加载单个平台数据（前10）
@@ -391,65 +436,6 @@ const closeModal = () => {
   modalItems.value = []
 }
 
-// AI总结 - 全局
-const handleGlobalAISummary = async (element?: HTMLElement) => {
-  aiTriggerElement.value = element ?? aiTriggerElement.value ?? document.body
-  aiModalTitle.value = '全平台热搜AI总结'
-  aiModalVisible.value = true
-  aiLoading.value = true
-  aiError.value = ''
-  aiSummary.value = null
-
-  try {
-    const response = await aiApi.getGlobalSummary()
-    aiSummary.value = response.data
-  } catch (error) {
-    console.error('获取全局AI总结失败:', error)
-    aiError.value = '获取AI总结失败，请稍后重试'
-  } finally {
-    aiLoading.value = false
-  }
-}
-
-// AI总结 - 按平台
-const handlePlatformAISummary = async (platform: Platform, element: HTMLElement) => {
-  const platformNames: Record<Platform, string> = {
-    [Platform.WEIBO]: '微博',
-    [Platform.TOUTIAO]: '今日头条',
-    [Platform.BILIBILI]: 'B站',
-    [Platform.DOUYIN]: '抖音',
-  }
-
-  aiTriggerElement.value = element
-  aiModalTitle.value = `${platformNames[platform]}热搜AI总结`
-  aiModalVisible.value = true
-  aiLoading.value = true
-  aiError.value = ''
-  aiSummary.value = null
-
-  try {
-    const response = await aiApi.getPlatformSummary(platform)
-    aiSummary.value = response.data
-  } catch (error) {
-    console.error(`获取${platformNames[platform]}AI总结失败:`, error)
-    aiError.value = '获取AI总结失败，请稍后重试'
-  } finally {
-    aiLoading.value = false
-  }
-}
-
-const closeAIModal = () => {
-  aiModalVisible.value = false
-  aiSummary.value = null
-  aiError.value = ''
-}
-
-const retryAISummary = () => {
-  if (aiModalTitle.value === '全平台热搜AI总结') {
-    handleGlobalAISummary(aiTriggerElement.value ?? document.body)
-  }
-}
-
 // 自动刷新定时器
 let aggregateRefreshTimer: ReturnType<typeof setInterval> | null = null
 let platformRefreshTimer: ReturnType<typeof setInterval> | null = null
@@ -512,7 +498,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="hot-search-page">
-    <div class="animated-overlay"></div>
     <Navbar />
 
     <main class="page-content">
@@ -527,7 +512,7 @@ onBeforeUnmount(() => {
             :show-view-all="true"
             @view-all="handleViewAll(Platform.WEIBO)"
             @refresh="loadPlatformData(Platform.WEIBO)"
-            @ai-summary="(el) => handlePlatformAISummary(Platform.WEIBO, el)"
+            @ai-summary="() => handlePlatformAISummary(Platform.WEIBO)"
           />
         </div>
 
@@ -541,7 +526,7 @@ onBeforeUnmount(() => {
             :show-view-all="true"
             @view-all="handleViewAll(Platform.BILIBILI)"
             @refresh="loadPlatformData(Platform.BILIBILI)"
-            @ai-summary="(el) => handlePlatformAISummary(Platform.BILIBILI, el)"
+            @ai-summary="() => handlePlatformAISummary(Platform.BILIBILI)"
           />
         </div>
 
@@ -569,7 +554,7 @@ onBeforeUnmount(() => {
             :show-view-all="true"
             @view-all="handleViewAll(Platform.TOUTIAO)"
             @refresh="loadPlatformData(Platform.TOUTIAO)"
-            @ai-summary="(el) => handlePlatformAISummary(Platform.TOUTIAO, el)"
+            @ai-summary="() => handlePlatformAISummary(Platform.TOUTIAO)"
           />
         </div>
 
@@ -583,7 +568,7 @@ onBeforeUnmount(() => {
             :show-view-all="true"
             @view-all="handleViewAll(Platform.DOUYIN)"
             @refresh="loadPlatformData(Platform.DOUYIN)"
-            @ai-summary="(el) => handlePlatformAISummary(Platform.DOUYIN, el)"
+            @ai-summary="() => handlePlatformAISummary(Platform.DOUYIN)"
           />
         </div>
       </div>
@@ -599,19 +584,6 @@ onBeforeUnmount(() => {
       :show-platform-icon="modalPlatform === 'AGGREGATE' || modalPlatform === 'CATEGORY'"
       @close="closeModal"
     />
-
-    <!-- AI总结弹窗 -->
-    <AISummaryPopover
-      :visible="aiModalVisible"
-      :title="aiModalTitle"
-      :summary="aiSummary"
-      :loading="aiLoading"
-      :error="aiError"
-      :trigger-element="aiTriggerElement"
-      @close="closeAIModal"
-      @retry="retryAISummary"
-    />
-
     <!-- AI提问悬浮按钮 -->
     <div
       class="qna-fab-container"
@@ -643,64 +615,6 @@ onBeforeUnmount(() => {
   background: url('/static/images/background.webp') no-repeat center center;
   background-size: 100% 100%;
   background-attachment: fixed;
-}
-
-.animated-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-
-/* 左上角阳光效果 */
-.animated-overlay::before {
-  content: '';
-  position: absolute;
-  top: -100px;
-  left: -100px;
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.35) 15%,
-    rgba(255, 255, 255, 0.25) 30%,
-    rgba(255, 255, 255, 0.15) 45%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 80%
-  );
-  filter: blur(45px);
-  animation: sunGlow 8s ease-in-out infinite;
-}
-
-/* 流动光效 */
-.animated-overlay::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
-  animation: sunGlow 8s ease-in-out infinite;
-  pointer-events: none;
-  filter: blur(35px);
-}
-
-@keyframes sunGlow {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.12);
-  }
 }
 
 .page-content {
@@ -889,7 +803,7 @@ onBeforeUnmount(() => {
   background-size: contain;
   background-color: transparent;
   color: #ffb3d9;
-  padding: 16px 28px;
+  padding: 20px 28px 16px;
   border-radius: 0;
   font-size: 13px;
   font-weight: 600;

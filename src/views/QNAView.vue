@@ -88,7 +88,6 @@ const handleClear = () => {
 
 <template>
   <div class="qna-page">
-    <div class="animated-overlay"></div>
     <div class="qna-container">
     <div class="header">
       <h1>智能问答</h1>
@@ -248,63 +247,6 @@ const handleClear = () => {
   background: url('/static/images/background2.jpg') no-repeat center center;
   background-size: cover;
   background-attachment: fixed;
-}
-
-.animated-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-
-/* 左上角阳光效果 */
-.animated-overlay::before {
-  content: '';
-  position: absolute;
-  top: -100px;
-  left: -100px;
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.35) 15%,
-    rgba(255, 255, 255, 0.25) 30%,
-    rgba(255, 255, 255, 0.15) 45%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 80%
-  );
-  filter: blur(45px);
-  animation: sunGlow 8s ease-in-out infinite;
-}
-
-/* 流动光效 */
-.animated-overlay::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
-  animation: sunGlow 8s ease-in-out infinite;
-  pointer-events: none;
-  filter: blur(35px);
-}
-
-@keyframes sunGlow {
-  0%, 100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.12);
-  }
 }
 
 @keyframes flowingLight {

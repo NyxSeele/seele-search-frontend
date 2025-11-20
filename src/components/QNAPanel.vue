@@ -31,7 +31,9 @@
               <div v-for="(chat, index) in chatHistory" :key="index" class="chat-item">
                 <!-- User Question -->
                 <div class="message user-message">
-                  <div class="message-avatar user-avatar">用户</div>
+                  <div class="message-avatar user-avatar">
+                    <img src="/static/icons/gVSewXzoCQwG9by.jpg" alt="用户头像" />
+                  </div>
                   <div class="message-content">
                     <div class="message-text">{{ chat.question }}</div>
                     <div v-if="chat.platformFilter" class="message-meta">
@@ -42,22 +44,23 @@
 
                 <!-- AI Answer -->
                 <div class="message ai-message">
-                  <div class="message-avatar ai-avatar">AI</div>
+                  <div class="message-avatar ai-avatar">
+                    <img src="/static/icons/thinking.png" alt="AI头像" />
+                  </div>
                   <div class="message-content">
-                    <div v-if="chat.loading" class="loading-state">
-                      <div class="typing-indicator">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
-                      <p>AI 正在思考...</p>
-                    </div>
-                    <div v-else-if="chat.error" class="error-state">
+                  <div v-if="chat.error" class="error-state">
                       <p>{{ chat.error }}</p>
                       <button class="retry-btn" @click="retryQuestion(index)">重试</button>
                     </div>
-                    <div v-else class="answer-content">
-                      <div class="message-text">{{ chat.answer }}</div>
+                  <div v-else class="answer-content">
+                    <div v-if="chat.loading && !chat.answer" class="loading-state">
+                      <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+                      <p>加载中...</p>
+                    </div>
+                    <div v-else class="message-text">
+                      {{ formatAnswerText(chat.answer || '') }}
+                      <span v-if="chat.streaming" class="streaming-cursor"></span>
+                    </div>
 
                       <!-- Related Hot Searches -->
                       <div
@@ -126,7 +129,7 @@
                   {{ suggestion }}
                 </div>
               </div>
-              <button class="voice-btn" title="语音输入" @click.stop>
+              <button class="voice-btn" title="语音输入" @click.stop="openVoiceModal">
                 <svg class="voice-icon" width="18" height="18" viewBox="0 0 16 16" fill="none">
                   <path
                     d="M8 11C9.65685 11 11 9.65685 11 8V3C11 1.34315 9.65685 0 8 0C6.34315 0 5 1.34315 5 3V8C5 9.65685 6.34315 11 8 11Z"
@@ -161,13 +164,27 @@
       </div>
     </Transition>
   </Teleport>
+  <Teleport to="body">
+    <div v-if="showVoiceModal" class="voice-modal-overlay" @click.self="closeVoiceModal">
+      <div class="voice-modal-card">
+        <p class="voice-modal-text">敬请期待</p>
+        <button class="voice-modal-btn" @click="closeVoiceModal">确定</button>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Platform } from '@/types'
 import type { QNARequest } from '@/types'
 import aiApi from '@/api/ai'
+import type {
+  QnaStreamChunkDetail,
+  QnaStreamEndDetail,
+  QnaStreamErrorDetail,
+  QnaStreamStartDetail,
+} from '@/utils/qnaStream'
 
 const props = defineProps<{
   visible: boolean
@@ -230,6 +247,11 @@ const handleMouseUp = () => {
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
+  window.removeEventListener('qna:stream-start', handleStreamStart as EventListener)
+  window.removeEventListener('qna:stream-chunk', handleStreamChunk as EventListener)
+  window.removeEventListener('qna:stream-end', handleStreamEnd as EventListener)
+  window.removeEventListener('qna:stream-error', handleStreamError as EventListener)
+  window.removeEventListener('qna:force-scroll', scrollToBottom)
 })
 
 interface ChatItem {
@@ -238,6 +260,8 @@ interface ChatItem {
   answer?: string
   loading: boolean
   error?: string
+  streamId?: string
+  streaming?: boolean
   relatedHotSearches?: Array<{
     title: string
     platform: Platform
@@ -247,7 +271,7 @@ interface ChatItem {
 }
 
 const question = ref('')
-const selectedPlatform = ref<Platform | ''>('')
+const selectedPlatform = ref<Platform | '' | null>('') 
 const chatHistory = ref<ChatItem[]>([])
 const chatContainerRef = ref<HTMLElement | null>(null)
 const isAsking = ref(false)
@@ -255,6 +279,14 @@ const showSuggestions = ref(false)
 const searchSuggestions = ref<string[]>([])
 const loadingSuggestions = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+const showVoiceModal = ref(false)
+const openVoiceModal = () => {
+  showVoiceModal.value = true
+}
+
+const closeVoiceModal = () => {
+  showVoiceModal.value = false
+}
 
 const platformOptions = [
   { label: '全部平台', value: '' },
@@ -298,23 +330,148 @@ const scrollToBottom = async () => {
   }
 }
 
+const STREAM_CHUNK_SIZE = 22
+const STREAM_DELAY = 30
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const streamAnswerForChatItem = async (chatItem: ChatItem, text: string) => {
+  const normalized = text || 'AI暂未生成回答，请稍后重试。'
+  chatItem.answer = ''
+  chatItem.loading = true
+  chatItem.streaming = true
+
+  for (let i = 0; i < normalized.length; i += STREAM_CHUNK_SIZE) {
+    chatItem.answer += normalized.slice(i, i + STREAM_CHUNK_SIZE)
+    if (chatItem.loading) {
+      chatItem.loading = false
+    }
+    await wait(STREAM_DELAY)
+    await scrollToBottom()
+  }
+
+  chatItem.streaming = false
+}
+
 const handleExampleQuestion = (exampleQ: string) => {
   question.value = exampleQ
+  selectedPlatform.value = null
   handleAskQuestion()
 }
+
+const platformBreakKeywords = ['微博', '抖音', 'B站', 'Bilibili', '今日头条', '头条', '全部平台', '全平台', '多平台']
+
+const formatAnswerText = (answer?: string) => {
+  if (!answer) return ''
+
+  let formatted = answer.trim()
+
+  formatted = formatted.replace(/\*\*/g, '')
+  formatted = formatted.replace(/^\s*\*\s?/gm, '- ')
+  formatted = formatted.replace(/\*/g, '')
+
+  formatted = formatted.replace(/(\d+[\.\、])/g, (match, _group, offset, str) => {
+    if (offset === 0) return match
+    const prevChar = str[offset - 1]
+    return prevChar === '\n' ? match : `\n${match}`
+  })
+
+  const platformPattern = new RegExp(`(${platformBreakKeywords.join('|')})[:：]`, 'g')
+  formatted = formatted.replace(platformPattern, (match, keyword, offset, str) => {
+    if (offset === 0) return `${keyword}：`
+    const prevChar = str[offset - 1]
+    return prevChar === '\n' ? `${keyword}：` : `\n${keyword}：`
+  })
+
+  formatted = formatted.replace(/\n{2,}/g, '\n')
+  formatted = formatted.replace(/^\s+|\s+$/g, '')
+
+  return formatted
+}
+
+const findChatItemByStreamId = (streamId: string) => chatHistory.value.find((chat) => chat.streamId === streamId)
+
+const handleStreamStart = (event: Event) => {
+  const detail = (event as CustomEvent<QnaStreamStartDetail>).detail
+  if (!detail) return
+
+  const chatItem: ChatItem = {
+    question: detail.question || 'AI总结',
+    loading: true,
+    answer: '',
+    streamId: detail.streamId,
+    streaming: true,
+  }
+
+  chatHistory.value.push(chatItem)
+  selectedPlatform.value = null
+  scrollToBottom()
+}
+
+const handleStreamChunk = (event: Event) => {
+  const detail = (event as CustomEvent<QnaStreamChunkDetail>).detail
+  if (!detail) return
+
+  const chatItem = findChatItemByStreamId(detail.streamId)
+  if (!chatItem) return
+
+  chatItem.answer = (chatItem.answer || '') + detail.chunk
+  if (chatItem.loading) {
+    chatItem.loading = false
+  }
+  chatItem.streaming = true
+  scrollToBottom()
+}
+
+const handleStreamEnd = (event: Event) => {
+  const detail = (event as CustomEvent<QnaStreamEndDetail>).detail
+  if (!detail) return
+
+  const chatItem = findChatItemByStreamId(detail.streamId)
+  if (!chatItem) return
+
+  chatItem.streaming = false
+  chatItem.loading = false
+  if (detail.relatedHotSearches) {
+    chatItem.relatedHotSearches = detail.relatedHotSearches
+  }
+}
+
+const handleStreamError = (event: Event) => {
+  const detail = (event as CustomEvent<QnaStreamErrorDetail>).detail
+  if (!detail) return
+
+  const chatItem = findChatItemByStreamId(detail.streamId)
+  if (!chatItem) return
+
+  chatItem.loading = false
+  chatItem.streaming = false
+  chatItem.error = detail.message || 'AI回答失败，请稍后重试'
+}
+
+onMounted(() => {
+  window.addEventListener('qna:stream-start', handleStreamStart as EventListener)
+  window.addEventListener('qna:stream-chunk', handleStreamChunk as EventListener)
+  window.addEventListener('qna:stream-end', handleStreamEnd as EventListener)
+  window.addEventListener('qna:stream-error', handleStreamError as EventListener)
+  window.addEventListener('qna:force-scroll', scrollToBottom)
+})
 
 const handleAskQuestion = async () => {
   if (!question.value.trim() || isAsking.value) return
 
+  const platformFilter = selectedPlatform.value || undefined
+
   const chatItem: ChatItem = {
     question: question.value.trim(),
-    platformFilter: selectedPlatform.value || undefined,
+    platformFilter,
     loading: true,
+    answer: '',
   }
 
   chatHistory.value.push(chatItem)
   const currentQuestion = question.value
   question.value = ''
+  selectedPlatform.value = null
   isAsking.value = true
 
   scrollToBottom()
@@ -322,14 +479,13 @@ const handleAskQuestion = async () => {
   try {
     const payload: QNARequest = {
       question: currentQuestion,
-      platformFilter: selectedPlatform.value || undefined,
+      platformFilter,
     }
 
     const response = await aiApi.askQuestion(payload)
 
-    chatItem.loading = false
-    chatItem.answer = response.data.answer
     chatItem.relatedHotSearches = response.data.relatedHotSearches
+    await streamAnswerForChatItem(chatItem, response.data.answer)
   } catch (error) {
     console.error('AI提问失败:', error)
     chatItem.loading = false
@@ -355,9 +511,8 @@ const retryQuestion = async (index: number) => {
 
     const response = await aiApi.askQuestion(payload)
 
-    chatItem.loading = false
-    chatItem.answer = response.data.answer
     chatItem.relatedHotSearches = response.data.relatedHotSearches
+    await streamAnswerForChatItem(chatItem, response.data.answer)
   } catch (error) {
     console.error('AI提问重试失败:', error)
     chatItem.loading = false
@@ -596,46 +751,70 @@ const handleSearchSuggestion = (suggestion: string) => {
 }
 
 .message-avatar {
-  width: 36px;
-  height: 36px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: #fff;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
+  overflow: hidden;
+  border: none;
 }
 
-.user-message .message-avatar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.ai-message .message-avatar {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+.message-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .message-content {
   flex: 1;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
+  background: transparent;
+  border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
+  border: none;
+  backdrop-filter: none;
 }
 
 .message-text {
   font-size: 15px;
-  line-height: 1.6;
-  color: #333;
+  line-height: 1.65;
+  color: #4b3829;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  background: currentColor;
+  margin-left: 2px;
+  animation: blink 1s steps(2, start) infinite;
+  vertical-align: bottom;
+}
+
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .message-meta {
   margin-top: 8px;
   font-size: 12px;
-  color: #999;
+  color: rgba(75, 56, 41, 0.7);
 }
 
 .loading-state,
@@ -645,41 +824,13 @@ const handleSearchSuggestion = (suggestion: string) => {
   align-items: center;
   gap: 12px;
   padding: 16px 0;
-  color: #666;
+  color: #4b3829;
 }
 
-.typing-indicator {
-  display: flex;
-  gap: 6px;
-}
-
-.typing-indicator span {
-  width: 8px;
-  height: 8px;
-  background: #667eea;
-  border-radius: 50%;
-  animation: typing 1.4s infinite;
-}
-
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.5;
-  }
-  30% {
-    transform: translateY(-10px);
-    opacity: 1;
-  }
+.loading-gif {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
 }
 
 .retry-btn {
@@ -712,7 +863,7 @@ const handleSearchSuggestion = (suggestion: string) => {
 .related-title {
   font-size: 14px;
   font-weight: 700;
-  color: #666;
+  color: #4b3829;
   margin: 0 0 12px 0;
 }
 
@@ -727,21 +878,21 @@ const handleSearchSuggestion = (suggestion: string) => {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  background: rgba(102, 126, 234, 0.05);
+  background: rgba(255, 255, 255, 0.5);
   border-radius: 8px;
   text-decoration: none;
   transition: all 0.3s ease;
 }
 
 .related-item:hover {
-  background: rgba(102, 126, 234, 0.1);
+  background: rgba(255, 255, 255, 0.7);
   transform: translateX(4px);
 }
 
 .related-platform {
   padding: 4px 10px;
-  background: #667eea;
-  color: #fff;
+  background: linear-gradient(135deg, #ffd89d, #f49d5c);
+  color: #4a2e1c;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 700;
@@ -751,7 +902,7 @@ const handleSearchSuggestion = (suggestion: string) => {
 .related-title-text {
   flex: 1;
   font-size: 13px;
-  color: #333;
+  color: #4b3829;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -771,16 +922,17 @@ const handleSearchSuggestion = (suggestion: string) => {
 }
 
 .filter-btn {
-  padding: 10px 26px;
+  padding: 6px;
   background: transparent !important;
   border: none;
-  border-radius: 999px;
-  font-size: 13px;
+  border-radius: 50%;
+  font-size: 12px;
   color: #ffffff;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  min-height: 48px;
+  min-height: 60px;
+  min-width: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -803,14 +955,14 @@ const handleSearchSuggestion = (suggestion: string) => {
 .filter-btn::after {
   content: '';
   position: absolute;
-  bottom: -40px;
+  top: -40px;
   left: 50%;
-  width: 48px;
-  height: 48px;
+  width: 32px;
+  height: 32px;
   background-image: var(--option-icon);
   background-repeat: no-repeat;
   background-size: 100% 100%;
-  transform: translate(-50%, 10px) scale(0.85);
+  transform: translate(-50%, 6px) scale(0.7);
   opacity: 0;
   transition: all 0.3s ease;
   pointer-events: none;
@@ -819,25 +971,24 @@ const handleSearchSuggestion = (suggestion: string) => {
 .filter-btn.active {
   background: transparent !important;
   color: #ffffff;
-  font-size: 14px;
+  transform: scale(1.08);
+  font-size: 13px;
   font-weight: 700;
 }
 
 .filter-btn.active::before {
-  background: url('/static/icons/long banner.png') no-repeat center center;
-  background-size: 100% 100%;
-  transform: scaleX(1.08);
-  filter: brightness(1);
+  transform: scale(1.1);
+  filter: brightness(1.2);
+}
+
+.filter-btn.active::after {
+  opacity: 1;
+  transform: translate(-50%, -2px) scale(0.85);
 }
 
 .filter-btn:hover:not(.active) {
   filter: brightness(1.08);
-  transform: translateY(-2px);
-}
-
-.filter-btn:hover::after {
-  opacity: 1;
-  transform: translate(-50%, 0) scale(1);
+  transform: scale(1.05);
 }
 
 .input-wrapper {
@@ -856,19 +1007,22 @@ const handleSearchSuggestion = (suggestion: string) => {
   font-size: 15px;
   outline: none;
   transition: all 0.3s ease;
-  background: url('/static/icons/banner.png') no-repeat center center;
-  background-size: 100% 100%;
-  color: #333;
+  background: rgba(255, 255, 255, 0.9);
+  color: #4b3829;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 
 .question-input:focus {
-  background: url('/static/icons/banner.png') no-repeat center center;
-  background-size: 100% 100%;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
 }
 
 .question-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.question-input::placeholder {
+  color: rgba(75, 56, 41, 0.6);
 }
 
 .suggestions-dropdown {
@@ -932,6 +1086,50 @@ const handleSearchSuggestion = (suggestion: string) => {
   color: #ffffff;
   stroke: currentColor;
   opacity: 1;
+}
+
+.voice-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+}
+
+.voice-modal-card {
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
+  padding: 32px 48px;
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  min-width: 260px;
+}
+
+.voice-modal-text {
+  font-size: 18px;
+  color: #4b3829;
+  font-weight: 700;
+}
+
+.voice-modal-btn {
+  padding: 8px 32px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f7c38a, #f4956c);
+  color: #4b3829;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.voice-modal-btn:hover {
+  transform: translateY(-2px);
 }
 
 .send-btn {

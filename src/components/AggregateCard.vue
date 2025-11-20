@@ -6,7 +6,10 @@
         <button
           ref="aiBtn"
           class="action-btn ai-btn"
-          :class="{ 'icon-thinking': currentIcon === 'thinking', 'icon-log': currentIcon === 'log' }"
+          :class="{
+            'icon-thinking': currentIcon === 'thinking',
+            'icon-log': currentIcon === 'log',
+          }"
           :style="{ opacity: iconOpacity }"
           title="AI总结"
           @click.stop="handleAISummaryClick"
@@ -26,19 +29,19 @@
         <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
         <p>加载中...</p>
       </div>
-      
+
       <!-- Error - Show loading instead -->
       <div v-else-if="error" class="card-loading">
         <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
         <p>加载中...</p>
       </div>
-      
+
       <!-- Empty - Show loading instead -->
       <div v-else-if="items.length === 0" class="card-loading">
         <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
         <p>加载中...</p>
       </div>
-      
+
       <!-- List -->
       <div v-else class="hot-list">
         <div
@@ -56,7 +59,9 @@
                 :alt="getPlatformLabel(item.platform)"
                 class="item-platform-icon"
               />
-              <span v-if="item.category" class="item-category">{{ getCategoryName(item.category) }}</span>
+              <span v-if="item.category" class="item-category">{{
+                getCategoryName(item.category)
+              }}</span>
               <span
                 v-if="item.heat > 0"
                 class="item-heat"
@@ -157,7 +162,7 @@ const getPlatformColor = (platform: Platform) => {
   const map: Record<Platform, string> = {
     [Platform.WEIBO]: '#E1306C',
     [Platform.TOUTIAO]: '#FF4757',
-    [Platform.BILIBILI]: '#64B5F6',  // 浅蓝色
+    [Platform.BILIBILI]: '#64B5F6', // 浅蓝色
     [Platform.DOUYIN]: '#000',
   }
   return map[platform]
@@ -278,7 +283,9 @@ const handleShare = async () => {
   font-size: 0;
   width: 44px;
   height: 44px;
-  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+  transition:
+    opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s ease;
 }
 
 .action-btn.ai-btn.icon-thinking {
@@ -457,7 +464,7 @@ const handleShare = async () => {
   top: 0;
   bottom: 0;
   width: 4px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #ff77b76d 0%, #c4507b97 100%);
   opacity: 0;
   transition: opacity 0.25s ease;
 }

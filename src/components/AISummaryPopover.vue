@@ -297,23 +297,25 @@ watch(
 }
 
 .summary-section {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(148, 112, 80, 0.25);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
 }
 
 .section-title {
   font-size: 15px;
   font-weight: 700;
-  color: #333;
+  color: #4b3829;
   margin: 0 0 12px 0;
 }
 
 .summary-text {
   font-size: 14px;
   line-height: 1.7;
-  color: #555;
+  color: #4b3829;
   margin: 0;
 }
 
@@ -324,10 +326,11 @@ watch(
 }
 
 .topic-item {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
   border-radius: 10px;
   padding: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(148, 112, 80, 0.2);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
 }
 
 .topic-header {
@@ -340,13 +343,13 @@ watch(
 .topic-name {
   font-size: 14px;
   font-weight: 700;
-  color: #333;
+  color: #4b3829;
 }
 
 .topic-desc {
   font-size: 13px;
   line-height: 1.6;
-  color: #666;
+  color: #564331;
   margin: 0;
 }
 
@@ -358,7 +361,7 @@ watch(
 .insights-list li {
   font-size: 14px;
   line-height: 1.7;
-  color: #555;
+  color: #4b3829;
   margin-bottom: 8px;
 }
 

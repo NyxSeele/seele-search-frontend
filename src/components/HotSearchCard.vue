@@ -6,7 +6,10 @@
         <button
           ref="aiBtn"
           class="action-btn ai-btn"
-          :class="{ 'icon-thinking': currentIcon === 'thinking', 'icon-log': currentIcon === 'log' }"
+          :class="{
+            'icon-thinking': currentIcon === 'thinking',
+            'icon-log': currentIcon === 'log',
+          }"
           :style="{ opacity: iconOpacity }"
           title="AI总结"
           @click.stop="handleAISummaryClick"
@@ -26,19 +29,19 @@
         <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
         <p>加载中...</p>
       </div>
-      
+
       <!-- Error - Show loading instead -->
       <div v-else-if="error" class="card-loading">
         <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
         <p>加载中...</p>
       </div>
-      
+
       <!-- Empty - Show loading instead -->
       <div v-else-if="items.length === 0" class="card-loading">
         <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
         <p>加载中...</p>
       </div>
-      
+
       <!-- List -->
       <div v-else class="hot-list">
         <div
@@ -51,7 +54,9 @@
           <div class="item-content">
             <div class="item-title">{{ item.title }}</div>
             <div class="item-meta">
-              <span v-if="item.category" class="item-category">{{ getCategoryName(item.category) }}</span>
+              <span v-if="item.category" class="item-category">{{
+                getCategoryName(item.category)
+              }}</span>
               <span
                 v-if="item.heat > 0"
                 class="item-heat"
@@ -254,7 +259,9 @@ const handleShare = async () => {
   font-size: 0;
   width: 44px;
   height: 44px;
-  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+  transition:
+    opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s ease;
 }
 
 .action-btn.ai-btn.icon-thinking {
@@ -421,6 +428,19 @@ const handleShare = async () => {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   position: relative;
+  border-left: none;
+}
+
+.hot-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(135deg, #ff77b76d 0%, #c4507b97 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
 }
 
 .hot-item:last-child {
@@ -428,8 +448,12 @@ const handleShare = async () => {
 }
 
 .hot-item:hover {
-  background: radial-gradient(ellipse at 0% 50%, rgba(255, 248, 220, 0.6) 0%, rgba(255, 253, 208, 0.3) 20%, rgba(255, 255, 240, 0.15) 40%, transparent 60%);
-  transform: translateX(6px);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.2) 100%);
+  transform: translateX(8px);
+}
+
+.hot-item:hover::before {
+  opacity: 1;
 }
 
 .item-rank {

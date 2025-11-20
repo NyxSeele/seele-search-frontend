@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useAIStore } from '@/stores/ai'
-import { ElMessage } from 'element-plus'
 import QNAPanel from '@/components/QNAPanel.vue'
+import { pushSummaryToQnaPanel } from '@/utils/qnaSummary'
 
 const aiStore = useAIStore()
 
@@ -12,7 +12,6 @@ onMounted(() => {
 
 const handleRefresh = async () => {
   await aiStore.fetchGlobalSummary()
-  ElMessage.success('已刷新总结')
 }
 
 const getHeatLevelColor = (level: string) => {
@@ -35,6 +34,7 @@ const getHeatLevelLabel = (level: string) => {
 
 // QNA面板
 const qnaPanelVisible = ref(false)
+const lastSummarySignature = ref('')
 
 // QNA按钮拖动
 const qnaFabPosition = ref({ x: 0, y: 0 })
@@ -89,11 +89,29 @@ const hideTooltipTemporarily = () => {
     showQnaTooltip.value = true
   }, 10000)
 }
+
+const focusQnaPanel = () => {
+  qnaPanelVisible.value = true
+  hideTooltipTemporarily()
+  window.dispatchEvent(new CustomEvent('qna:force-scroll'))
+}
+
+watch(
+  () => aiStore.summary,
+  (summary) => {
+    if (!summary) return
+    const signature = JSON.stringify(summary)
+    if (signature === lastSummarySignature.value) return
+    lastSummarySignature.value = signature
+    pushSummaryToQnaPanel('趋势总结', summary)
+    focusQnaPanel()
+  },
+  { deep: true },
+)
 </script>
 
 <template>
   <div class="summary-page">
-    <div class="animated-overlay"></div>
     <div class="summary-container">
       <div class="header">
         <h1>趋势总结</h1>
@@ -183,18 +201,18 @@ const hideTooltipTemporarily = () => {
                   </div>
                 </div>
               </el-tab-pane>
-              <el-tab-pane v-if="aiStore.summary.platformAnalysis.TOUTIAO" label="今日头条">
+              <el-tab-pane v-if="aiStore.summary.platformAnalysis.toutiao" label="今日头条">
                 <div class="platform-analysis">
                   <p>
                     <strong>特征：</strong
-                    >{{ aiStore.summary.platformAnalysis.TOUTIAO.characteristic }}
+                    >{{ aiStore.summary.platformAnalysis.toutiao.characteristic }}
                   </p>
                   <p>
-                    <strong>总结：</strong>{{ aiStore.summary.platformAnalysis.TOUTIAO.summary }}
+                    <strong>总结：</strong>{{ aiStore.summary.platformAnalysis.toutiao.summary }}
                   </p>
                   <div class="top-items">
                     <div
-                      v-for="item in aiStore.summary.platformAnalysis.TOUTIAO.topItems"
+                      v-for="item in aiStore.summary.platformAnalysis.toutiao.topItems"
                       :key="item.rank"
                       class="top-item"
                     >
@@ -275,73 +293,6 @@ const hideTooltipTemporarily = () => {
   background: url('/static/images/background2.jpg') no-repeat center center;
   background-size: cover;
   background-attachment: fixed;
-}
-
-.animated-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-
-/* 左上角阳光效果 */
-.animated-overlay::before {
-  content: '';
-  position: absolute;
-  top: -100px;
-  left: -100px;
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.35) 15%,
-    rgba(255, 255, 255, 0.25) 30%,
-    rgba(255, 255, 255, 0.15) 45%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 80%
-  );
-  filter: blur(45px);
-  animation: sunGlow 8s ease-in-out infinite;
-}
-
-/* 流动光效 */
-.animated-overlay::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
-  animation: sunGlow 8s ease-in-out infinite;
-  pointer-events: none;
-  filter: blur(35px);
-}
-
-@keyframes sunGlow {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.12);
-  }
-}
-
-@keyframes flowingLight {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(50%);
-  }
 }
 
 .summary-container {
@@ -539,7 +490,7 @@ const hideTooltipTemporarily = () => {
   background-size: contain;
   background-color: transparent;
   color: #ffb3d9;
-  padding: 16px 28px;
+  padding: 20px 28px 16px;
   border-radius: 0;
   font-size: 13px;
   font-weight: 600;

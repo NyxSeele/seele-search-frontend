@@ -1,6 +1,5 @@
 <template>
   <div class="home-page">
-    <div class="animated-overlay"></div>
     <Navbar />
 
     <main class="home-content">
@@ -55,7 +54,7 @@
                 />
               </svg>
             </button>
-            <button class="mic-button" title="语音输入">
+            <button class="mic-button" title="语音输入" @click.prevent="openVoiceModal">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M8 11C9.65685 11 11 9.65685 11 8V3C11 1.34315 9.65685 0 8 0C6.34315 0 5 1.34315 5 3V8C5 9.65685 6.34315 11 8 11Z"
@@ -151,6 +150,15 @@
     <!-- QNA面板 -->
     <QNAPanel :visible="qnaPanelVisible" @close="qnaPanelVisible = false" />
 
+    <Teleport to="body">
+      <div v-if="showVoiceModal" class="voice-modal-overlay" @click.self="closeVoiceModal">
+        <div class="voice-modal-card">
+          <p class="voice-modal-text">敬请期待</p>
+          <button class="voice-modal-btn" @click="closeVoiceModal">确定</button>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Footer -->
     <Footer />
   </div>
@@ -160,7 +168,6 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
-import AnimatedBackground from '@/components/AnimatedBackground.vue'
 import QNAPanel from '@/components/QNAPanel.vue'
 import Footer from '@/components/Footer.vue'
 import hotSearchApi from '@/api/hotSearch'
@@ -180,6 +187,14 @@ const hasDragged = ref(false)
 const DRAG_THRESHOLD = 6
 const showQnaTooltip = ref(true)
 let tooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+const showVoiceModal = ref(false)
+const openVoiceModal = () => {
+  showVoiceModal.value = true
+}
+
+const closeVoiceModal = () => {
+  showVoiceModal.value = false
+}
 
 const getPlatformLabel = (platform: Platform) => {
   const map: Record<Platform, string> = {
@@ -376,73 +391,6 @@ onBeforeUnmount(() => {
   background-attachment: fixed;
 }
 
-.animated-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-
-/* 左上角阳光效果 */
-.animated-overlay::before {
-  content: '';
-  position: absolute;
-  top: -100px;
-  left: -100px;
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.35) 15%,
-    rgba(255, 255, 255, 0.25) 30%,
-    rgba(255, 255, 255, 0.15) 45%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 80%
-  );
-  filter: blur(45px);
-  animation: sunGlow 8s ease-in-out infinite;
-}
-
-/* 流动光效 */
-.animated-overlay::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 70%);
-  animation: sunGlow 8s ease-in-out infinite;
-  pointer-events: none;
-  filter: blur(35px);
-}
-
-@keyframes sunGlow {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.12);
-  }
-}
-
-@keyframes flowingLight {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(50%);
-  }
-}
-
 .home-content {
   display: flex;
   align-items: center;
@@ -530,7 +478,7 @@ onBeforeUnmount(() => {
 
 .bubble-text {
   position: absolute;
-  top: 50%;
+  top: 55%;
   left: 50%;
   transform: translate(-50%, -50%);
   color: #ffb3d9;
@@ -826,7 +774,7 @@ onBeforeUnmount(() => {
   background-size: contain;
   background-color: transparent;
   color: #ffb3d9;
-  padding: 16px 28px;
+  padding: 20px 28px 16px;
   border-radius: 0;
   font-size: 13px;
   font-weight: 600;
@@ -873,5 +821,49 @@ onBeforeUnmount(() => {
   50% {
     transform: scale(1.1);
   }
+}
+
+.voice-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+}
+
+.voice-modal-card {
+  background: url('/static/images/card.png') no-repeat center center;
+  background-size: 100% 100%;
+  padding: 32px 48px;
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  min-width: 260px;
+}
+
+.voice-modal-text {
+  font-size: 18px;
+  color: #4b3829;
+  font-weight: 700;
+}
+
+.voice-modal-btn {
+  padding: 8px 32px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f7c38a, #f4956c);
+  color: #4b3829;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.voice-modal-btn:hover {
+  transform: translateY(-2px);
 }
 </style>

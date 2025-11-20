@@ -326,23 +326,25 @@ const handleClose = () => {
 }
 
 .summary-section {
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.92);
   border-radius: 16px;
   padding: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(148, 112, 80, 0.25);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.1);
 }
 
 .section-title {
   font-size: 18px;
   font-weight: 700;
-  color: #333;
+  color: #4b3829;
   margin: 0 0 16px 0;
 }
 
 .summary-text {
   font-size: 15px;
   line-height: 1.8;
-  color: #555;
+  color: #4b3829;
   margin: 0;
 }
 
@@ -353,15 +355,16 @@ const handleClose = () => {
 }
 
 .topic-card {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(148, 112, 80, 0.25);
   transition: all 0.3s ease;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
 }
 
 .topic-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.14);
   transform: translateY(-2px);
 }
 
@@ -375,7 +378,7 @@ const handleClose = () => {
 .topic-name {
   font-size: 16px;
   font-weight: 700;
-  color: #333;
+  color: #4b3829;
 }
 
 .heat-badge {
@@ -404,7 +407,7 @@ const handleClose = () => {
 .topic-desc {
   font-size: 14px;
   line-height: 1.6;
-  color: #666;
+  color: #584534;
   margin: 0 0 12px 0;
 }
 
@@ -416,8 +419,8 @@ const handleClose = () => {
 
 .platform-tag {
   padding: 4px 12px;
-  background: rgba(14, 165, 233, 0.1);
-  color: #0ea5e9;
+  background: rgba(245, 177, 97, 0.2);
+  color: #4b3829;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
@@ -431,7 +434,7 @@ const handleClose = () => {
 .insights-list li {
   font-size: 15px;
   line-height: 1.8;
-  color: #555;
+  color: #4b3829;
   margin-bottom: 12px;
 }
 
