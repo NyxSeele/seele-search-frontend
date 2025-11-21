@@ -147,14 +147,102 @@
       </div>
     </div>
 
+    <!-- Kiana按钮（崩坏3公告） -->
+    <div
+      class="kiana-fab-container"
+      :style="{ transform: `translate(${kianaFabPosition.x}px, ${kianaFabPosition.y}px)` }"
+      @mousedown="handleKianaMouseDown"
+      @mouseenter="handleKianaMouseEnter"
+    >
+      <button class="kiana-fab" @click="handleKianaClick" title="崩坏3最新公告">
+        <img src="/static/icons/kiana.png" alt="Kiana" class="fab-icon-img" />
+      </button>
+      <div v-if="showKianaTooltip" class="kiana-tooltip">
+        点我查看崩坏3最新公告
+      </div>
+    </div>
+
     <!-- QNA面板 -->
     <QNAPanel :visible="qnaPanelVisible" @close="qnaPanelVisible = false" />
+
+    <!-- 崩坏3公告卡片 -->
+    <FullListModal
+      :visible="honkaiModalVisible"
+      platform="AGGREGATE"
+      :items="honkaiItems"
+      :loading="honkaiLoading"
+      :error="honkaiError"
+      title="崩坏3最新公告"
+      :show-platform-icon="false"
+      @close="closeHonkaiModal"
+    />
+
+    <!-- 崩坏3公告卡片 -->
+    <FullListModal
+      :visible="honkaiModalVisible"
+      platform="AGGREGATE"
+      :items="honkaiItems"
+      :loading="honkaiLoading"
+      :error="honkaiError"
+      title="崩坏3最新公告"
+      :show-platform-icon="false"
+      @close="closeHonkaiModal"
+    />
 
     <Teleport to="body">
       <div v-if="showVoiceModal" class="voice-modal-overlay" @click.self="closeVoiceModal">
         <div class="voice-modal-card">
-          <p class="voice-modal-text">敬请期待</p>
-          <button class="voice-modal-btn" @click="closeVoiceModal">确定</button>
+          <div class="voice-modal-header">
+            <h3 class="voice-modal-title">语音输入</h3>
+            <button class="voice-modal-close" @click="closeVoiceModal">✕</button>
+          </div>
+          <div class="voice-modal-content">
+            <div v-if="isListening" class="voice-listening">
+              <div class="voice-animation">
+                <div class="voice-wave"></div>
+                <div class="voice-wave"></div>
+                <div class="voice-wave"></div>
+              </div>
+              <p class="voice-status-text">正在聆听...</p>
+              <p class="voice-hint">请开始说话</p>
+            </div>
+            <div v-else-if="voiceError" class="voice-error">
+              <p class="voice-error-text">{{ voiceError }}</p>
+            </div>
+            <div v-else class="voice-ready">
+              <p class="voice-ready-text">点击开始按钮开始语音输入</p>
+            </div>
+            <div v-if="finalTranscript || interimTranscript" class="voice-transcript">
+              <p class="transcript-label">识别结果：</p>
+              <p class="transcript-text">{{ finalTranscript || interimTranscript }}</p>
+            </div>
+          </div>
+          <div class="voice-modal-actions">
+            <button
+              v-if="isListening"
+              class="voice-modal-btn voice-stop-btn"
+              @click="stopListening"
+            >
+              停止
+            </button>
+            <button
+              v-else-if="!voiceError"
+              class="voice-modal-btn voice-start-btn"
+              @click="openVoiceModal"
+            >
+              重新开始
+            </button>
+            <button
+              v-if="finalTranscript"
+              class="voice-modal-btn voice-confirm-btn"
+              @click="closeVoiceModal"
+            >
+              确认搜索
+            </button>
+            <button class="voice-modal-btn voice-cancel-btn" @click="closeVoiceModal">
+              {{ finalTranscript ? '取消' : '关闭' }}
+            </button>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -170,6 +258,7 @@ import { useRouter } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
 import QNAPanel from '@/components/QNAPanel.vue'
 import Footer from '@/components/Footer.vue'
+import FullListModal from '@/components/FullListModal.vue'
 import hotSearchApi from '@/api/hotSearch'
 import type { HotSearchItem } from '@/types'
 import { Platform } from '@/types'
@@ -187,13 +276,123 @@ const hasDragged = ref(false)
 const DRAG_THRESHOLD = 6
 const showQnaTooltip = ref(true)
 let tooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+
+// Kiana按钮相关状态
+const kianaFabPosition = ref({ x: 0, y: 0 })
+const isKianaDragging = ref(false)
+const kianaDragStart = ref({ x: 0, y: 0 })
+const kianaHasDragged = ref(false)
+const showKianaTooltip = ref(true)
+let kianaTooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+const honkaiModalVisible = ref(false)
+const honkaiItems = ref<HotSearchItem[]>([])
+const honkaiLoading = ref(false)
+const honkaiError = ref('')
 const showVoiceModal = ref(false)
+const isListening = ref(false)
+const recognition: any = ref(null)
+const voiceError = ref('')
+const interimTranscript = ref('')
+const finalTranscript = ref('')
+
 const openVoiceModal = () => {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    voiceError.value = '您的浏览器不支持语音识别功能，请使用Chrome、Edge等现代浏览器'
+    showVoiceModal.value = true
+    return
+  }
+
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  recognition.value = new SpeechRecognition()
+  recognition.value.continuous = false
+  recognition.value.interimResults = true
+  recognition.value.lang = 'zh-CN'
+
+  recognition.value.onstart = () => {
+    isListening.value = true
+    voiceError.value = ''
+    interimTranscript.value = ''
+    finalTranscript.value = ''
+  }
+
+  recognition.value.onresult = (event: any) => {
+    let interim = ''
+    let final = ''
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript
+      if (event.results[i].isFinal) {
+        final += transcript
+      } else {
+        interim += transcript
+      }
+    }
+
+    interimTranscript.value = interim
+    finalTranscript.value = final
+  }
+
+  recognition.value.onerror = (event: any) => {
+    console.error('语音识别错误:', event.error)
+    isListening.value = false
+    switch (event.error) {
+      case 'no-speech':
+        voiceError.value = '未检测到语音，请重试'
+        break
+      case 'audio-capture':
+        voiceError.value = '无法访问麦克风，请检查权限设置'
+        break
+      case 'not-allowed':
+        voiceError.value = '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问'
+        break
+      default:
+        voiceError.value = '语音识别出错，请重试'
+    }
+  }
+
+  recognition.value.onend = () => {
+    isListening.value = false
+    if (finalTranscript.value) {
+      searchQuery.value = finalTranscript.value
+      closeVoiceModal()
+      handleSearch()
+    }
+  }
+
   showVoiceModal.value = true
+  try {
+    recognition.value.start()
+  } catch (error) {
+    console.error('启动语音识别失败:', error)
+    voiceError.value = '启动语音识别失败，请重试'
+    isListening.value = false
+  }
 }
 
 const closeVoiceModal = () => {
+  if (recognition.value && isListening.value) {
+    try {
+      recognition.value.stop()
+    } catch (error) {
+      console.error('停止语音识别失败:', error)
+    }
+  }
+  isListening.value = false
   showVoiceModal.value = false
+  interimTranscript.value = ''
+  finalTranscript.value = ''
+  voiceError.value = ''
+}
+
+const stopListening = () => {
+  if (recognition.value && isListening.value) {
+    try {
+      recognition.value.stop()
+    } catch (error) {
+      console.error('停止语音识别失败:', error)
+    }
+  }
+  isListening.value = false
 }
 
 const getPlatformLabel = (platform: Platform) => {
@@ -371,12 +570,99 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside)
 })
 
+const handleKianaMouseDown = (e: MouseEvent) => {
+  isKianaDragging.value = true
+  kianaHasDragged.value = false
+  kianaDragStart.value = {
+    x: e.clientX - kianaFabPosition.value.x,
+    y: e.clientY - kianaFabPosition.value.y,
+  }
+  document.addEventListener('mousemove', handleKianaMouseMove)
+  document.addEventListener('mouseup', handleKianaMouseUp)
+}
+
+const handleKianaMouseMove = (e: MouseEvent) => {
+  if (!isKianaDragging.value) return
+  const nextPosition = {
+    x: e.clientX - kianaDragStart.value.x,
+    y: e.clientY - kianaDragStart.value.y,
+  }
+  const deltaX = nextPosition.x - kianaFabPosition.value.x
+  const deltaY = nextPosition.y - kianaFabPosition.value.y
+  if (!kianaHasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      kianaHasDragged.value = true
+    }
+  }
+  if (kianaHasDragged.value) {
+    kianaFabPosition.value = nextPosition
+  }
+}
+
+const handleKianaMouseUp = () => {
+  isKianaDragging.value = false
+  document.removeEventListener('mousemove', handleKianaMouseMove)
+  document.removeEventListener('mouseup', handleKianaMouseUp)
+}
+
+const handleKianaClick = async () => {
+  if (kianaHasDragged.value) {
+    kianaHasDragged.value = false
+    return
+  }
+  // 显示崩坏3公告卡片
+  honkaiModalVisible.value = true
+  hideKianaTooltipTemporarily()
+  
+  if (honkaiItems.value.length === 0) {
+    await loadHonkaiData()
+  }
+}
+
+const loadHonkaiData = async () => {
+  honkaiLoading.value = true
+  honkaiError.value = ''
+  try {
+    const response = await hotSearchApi.getHonkaiHotSearch()
+    honkaiItems.value = response.data || []
+  } catch (error) {
+    console.error('加载崩坏3数据失败:', error)
+    honkaiError.value = '加载失败，请稍后重试'
+  } finally {
+    honkaiLoading.value = false
+  }
+}
+
+const closeHonkaiModal = () => {
+  honkaiModalVisible.value = false
+}
+
+const handleKianaMouseEnter = () => {
+  hideKianaTooltipTemporarily()
+}
+
+const hideKianaTooltipTemporarily = () => {
+  showKianaTooltip.value = false
+  if (kianaTooltipHideTimer) {
+    clearTimeout(kianaTooltipHideTimer)
+  }
+  kianaTooltipHideTimer = setTimeout(() => {
+    showKianaTooltip.value = true
+  }, 10000)
+}
+
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('mousemove', handleQnaMouseMove)
   document.removeEventListener('mouseup', handleQnaMouseUp)
+  document.removeEventListener('mousemove', handleKianaMouseMove)
+  document.removeEventListener('mouseup', handleKianaMouseUp)
   if (tooltipHideTimer) {
     clearTimeout(tooltipHideTimer)
+  }
+  if (kianaTooltipHideTimer) {
+    clearTimeout(kianaTooltipHideTimer)
   }
 })
 </script>
@@ -736,6 +1022,16 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
+/* Kiana按钮容器 */
+.kiana-fab-container {
+  position: fixed;
+  bottom: 100px;
+  left: 32px;
+  z-index: 1000;
+  cursor: move;
+  user-select: none;
+}
+
 .qna-fab {
   width: 90px;
   height: 90px;
@@ -823,6 +1119,65 @@ onBeforeUnmount(() => {
   }
 }
 
+/* Kiana按钮样式（与QNA完全一致） */
+.kiana-fab {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.kiana-fab:hover {
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: none;
+}
+
+.kiana-fab:active {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.kiana-fab:hover + .kiana-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Kiana提示气泡 */
+.kiana-tooltip {
+  position: absolute;
+  bottom: 76px;
+  left: 0;
+  background: url('/static/icons/bubble.png') no-repeat center center;
+  background-size: contain;
+  background-color: transparent;
+  color: #ffb3d9;
+  padding: 20px 28px 16px;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: none;
+  animation: tooltipBounce 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  min-width: 150px;
+}
+
+.kiana-tooltip::after {
+  display: none;
+}
+
 .voice-modal-overlay {
   position: fixed;
   inset: 0;
@@ -841,29 +1196,197 @@ onBeforeUnmount(() => {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 20px;
-  min-width: 260px;
+  min-width: 360px;
+  max-width: 500px;
 }
 
-.voice-modal-text {
-  font-size: 18px;
+.voice-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.voice-modal-title {
+  font-size: 20px;
   color: #4b3829;
   font-weight: 700;
+  margin: 0;
+}
+
+.voice-modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  font-size: 18px;
+  color: #4b3829;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.voice-modal-close:hover {
+  background: rgba(75, 56, 41, 0.1);
+}
+
+.voice-modal-content {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.voice-listening {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.voice-animation {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-wave {
+  width: 12px;
+  height: 40px;
+  background: linear-gradient(135deg, #f7c38a, #f4956c);
+  border-radius: 6px;
+  animation: voiceWave 1.2s ease-in-out infinite;
+}
+
+.voice-wave:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.voice-wave:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes voiceWave {
+  0%, 100% {
+    transform: scaleY(0.5);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.voice-status-text {
+  font-size: 18px;
+  color: #4b3829;
+  font-weight: 600;
+  margin: 0;
+}
+
+.voice-hint {
+  font-size: 14px;
+  color: rgba(75, 56, 41, 0.7);
+  margin: 0;
+}
+
+.voice-error {
+  text-align: center;
+}
+
+.voice-error-text {
+  font-size: 16px;
+  color: #e74c3c;
+  font-weight: 600;
+  margin: 0;
+}
+
+.voice-ready {
+  text-align: center;
+}
+
+.voice-ready-text {
+  font-size: 16px;
+  color: #4b3829;
+  margin: 0;
+}
+
+.voice-transcript {
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  border: 1px solid rgba(75, 56, 41, 0.2);
+}
+
+.transcript-label {
+  font-size: 14px;
+  color: rgba(75, 56, 41, 0.7);
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.transcript-text {
+  font-size: 16px;
+  color: #4b3829;
+  margin: 0;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.voice-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .voice-modal-btn {
-  padding: 8px 32px;
+  padding: 10px 24px;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #f7c38a, #f4956c);
-  color: #4b3829;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: all 0.2s ease;
+  font-size: 15px;
 }
 
-.voice-modal-btn:hover {
+.voice-start-btn,
+.voice-confirm-btn {
+  background: linear-gradient(135deg, #f7c38a, #f4956c);
+  color: #4b3829;
+}
+
+.voice-start-btn:hover,
+.voice-confirm-btn:hover {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(247, 195, 138, 0.4);
+}
+
+.voice-stop-btn {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: #fff;
+}
+
+.voice-stop-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.voice-cancel-btn {
+  background: rgba(75, 56, 41, 0.1);
+  color: #4b3829;
+}
+
+.voice-cancel-btn:hover {
+  background: rgba(75, 56, 41, 0.2);
 }
 </style>

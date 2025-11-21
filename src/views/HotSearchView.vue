@@ -55,6 +55,18 @@ const hasDragged = ref(false)
 const DRAG_THRESHOLD = 6
 const showQnaTooltip = ref(true)
 let tooltipHideTimer: number | null = null
+
+// Kiana按钮相关状态
+const kianaFabPosition = ref({ x: 0, y: 0 })
+const isKianaDragging = ref(false)
+const kianaDragStart = ref({ x: 0, y: 0 })
+const kianaHasDragged = ref(false)
+const showKianaTooltip = ref(true)
+let kianaTooltipHideTimer: number | null = null
+const honkaiModalVisible = ref(false)
+const honkaiItems = ref<HotSearchItem[]>([])
+const honkaiLoading = ref(false)
+const honkaiError = ref('')
 const platformRetryTimers: Partial<Record<Platform, ReturnType<typeof setTimeout> | null>> = {}
 const platformDisplayNames: Record<Platform, string> = {
   [Platform.WEIBO]: '微博',
@@ -133,6 +145,85 @@ const hideTooltipTemporarily = () => {
   }
   tooltipHideTimer = window.setTimeout(() => {
     showQnaTooltip.value = true
+  }, 10000)
+}
+
+const handleKianaMouseDown = (e: MouseEvent) => {
+  isKianaDragging.value = true
+  kianaHasDragged.value = false
+  kianaDragStart.value = { x: e.clientX - kianaFabPosition.value.x, y: e.clientY - kianaFabPosition.value.y }
+  document.addEventListener('mousemove', handleKianaMouseMove)
+  document.addEventListener('mouseup', handleKianaMouseUp)
+}
+
+const handleKianaMouseMove = (e: MouseEvent) => {
+  if (!isKianaDragging.value) return
+  const nextPosition = {
+    x: e.clientX - kianaDragStart.value.x,
+    y: e.clientY - kianaDragStart.value.y,
+  }
+  const deltaX = nextPosition.x - kianaFabPosition.value.x
+  const deltaY = nextPosition.y - kianaFabPosition.value.y
+  if (!kianaHasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      kianaHasDragged.value = true
+    }
+  }
+  if (kianaHasDragged.value) {
+    kianaFabPosition.value = nextPosition
+  }
+}
+
+const handleKianaMouseUp = () => {
+  isKianaDragging.value = false
+  document.removeEventListener('mousemove', handleKianaMouseMove)
+  document.removeEventListener('mouseup', handleKianaMouseUp)
+}
+
+const handleKianaClick = async () => {
+  if (kianaHasDragged.value) {
+    kianaHasDragged.value = false
+    return
+  }
+  // 显示崩坏3公告卡片
+  honkaiModalVisible.value = true
+  hideKianaTooltipTemporarily()
+  
+  if (honkaiItems.value.length === 0) {
+    await loadHonkaiData()
+  }
+}
+
+const loadHonkaiData = async () => {
+  honkaiLoading.value = true
+  honkaiError.value = ''
+  try {
+    const response = await hotSearchApi.getHonkaiHotSearch()
+    honkaiItems.value = response.data || []
+  } catch (error) {
+    console.error('加载崩坏3数据失败:', error)
+    honkaiError.value = '加载失败，请稍后重试'
+  } finally {
+    honkaiLoading.value = false
+  }
+}
+
+const closeHonkaiModal = () => {
+  honkaiModalVisible.value = false
+}
+
+const handleKianaMouseEnter = () => {
+  hideKianaTooltipTemporarily()
+}
+
+const hideKianaTooltipTemporarily = () => {
+  showKianaTooltip.value = false
+  if (kianaTooltipHideTimer) {
+    clearTimeout(kianaTooltipHideTimer)
+  }
+  kianaTooltipHideTimer = window.setTimeout(() => {
+    showKianaTooltip.value = true
   }, 10000)
 }
 
@@ -493,6 +584,11 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopAutoRefresh()
+  document.removeEventListener('mousemove', handleKianaMouseMove)
+  document.removeEventListener('mouseup', handleKianaMouseUp)
+  if (kianaTooltipHideTimer) {
+    clearTimeout(kianaTooltipHideTimer)
+  }
 })
 </script>
 
@@ -599,8 +695,35 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- Kiana按钮（崩坏3公告） -->
+    <div
+      class="kiana-fab-container"
+      :style="{ transform: `translate(${kianaFabPosition.x}px, ${kianaFabPosition.y}px)` }"
+      @mousedown="handleKianaMouseDown"
+      @mouseenter="handleKianaMouseEnter"
+    >
+      <button class="kiana-fab" @click="handleKianaClick" title="崩坏3最新公告">
+        <img src="/static/icons/kiana.png" alt="Kiana" class="fab-icon-img" />
+      </button>
+      <div v-if="showKianaTooltip" class="kiana-tooltip">
+        点我查看崩坏3最新公告
+      </div>
+    </div>
+
     <!-- QNA面板 -->
     <QNAPanel :visible="qnaPanelVisible" @close="qnaPanelVisible = false" />
+
+    <!-- 崩坏3公告卡片 -->
+    <FullListModal
+      :visible="honkaiModalVisible"
+      platform="AGGREGATE"
+      :items="honkaiItems"
+      :loading="honkaiLoading"
+      :error="honkaiError"
+      title="崩坏3最新公告"
+      :show-platform-icon="false"
+      @close="closeHonkaiModal"
+    />
 
     <!-- Footer -->
     <Footer />
@@ -850,5 +973,74 @@ onBeforeUnmount(() => {
   50% {
     transform: scale(1.1);
   }
+}
+
+/* Kiana按钮容器 */
+.kiana-fab-container {
+  position: fixed;
+  bottom: 100px;
+  left: 32px;
+  z-index: 1000;
+  cursor: move;
+  user-select: none;
+}
+
+/* Kiana按钮样式（与QNA完全一致） */
+.kiana-fab {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.kiana-fab:hover {
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: none;
+}
+
+.kiana-fab:active {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.kiana-fab:hover + .kiana-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Kiana提示气泡 */
+.kiana-tooltip {
+  position: absolute;
+  bottom: 76px;
+  left: 0;
+  background: url('/static/icons/bubble.png') no-repeat center center;
+  background-size: contain;
+  background-color: transparent;
+  color: #ffb3d9;
+  padding: 20px 28px 16px;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: none;
+  animation: tooltipBounce 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  min-width: 150px;
+}
+
+.kiana-tooltip::after {
+  display: none;
 }
 </style>

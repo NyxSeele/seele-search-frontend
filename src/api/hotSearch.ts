@@ -66,6 +66,13 @@ export const getClassificationStats = () => {
 }
 
 /**
+ * 获取崩坏3公告数据
+ */
+export const getHonkaiHotSearch = () => {
+  return apiClient.get<any, ApiResponse<HotSearchItem[]>>('/api/hot-search/honkai')
+}
+
+/**
  * 热搜 API 默认导出（用于组件调用）
  */
 export default {
@@ -82,4 +89,5 @@ export default {
   getHotSearchByCategory,
   getSearchSuggestions,
   getClassificationStats,
+  getHonkaiHotSearch,
 }

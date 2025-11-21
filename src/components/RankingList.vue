@@ -387,8 +387,8 @@ const handleItemClick = (item: HotSearchItem) => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.7));
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  background: transparent;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;

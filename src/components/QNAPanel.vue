@@ -32,7 +32,7 @@
                 <!-- User Question -->
                 <div class="message user-message">
                   <div class="message-avatar user-avatar">
-                    <img src="/static/icons/gVSewXzoCQwG9by.jpg" alt="用户头像" />
+                    <img src="/static/icons/kiana.png" alt="用户头像" />
                   </div>
                   <div class="message-content">
                     <div class="message-text">{{ chat.question }}</div>
@@ -48,19 +48,19 @@
                     <img src="/static/icons/thinking.png" alt="AI头像" />
                   </div>
                   <div class="message-content">
-                  <div v-if="chat.error" class="error-state">
+                    <div v-if="chat.error" class="error-state">
                       <p>{{ chat.error }}</p>
                       <button class="retry-btn" @click="retryQuestion(index)">重试</button>
                     </div>
-                  <div v-else class="answer-content">
-                    <div v-if="chat.loading && !chat.answer" class="loading-state">
-                      <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
-                      <p>加载中...</p>
-                    </div>
-                    <div v-else class="message-text">
-                      {{ formatAnswerText(chat.answer || '') }}
-                      <span v-if="chat.streaming" class="streaming-cursor"></span>
-                    </div>
+                    <div v-else class="answer-content">
+                      <div v-if="chat.loading && !chat.answer" class="loading-state">
+                        <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+                        <p>加载中...</p>
+                      </div>
+                      <div v-else class="message-text">
+                        {{ formatAnswerText(chat.answer || '') }}
+                        <span v-if="chat.streaming" class="streaming-cursor"></span>
+                      </div>
 
                       <!-- Related Hot Searches -->
                       <div
@@ -76,8 +76,12 @@
                             target="_blank"
                             class="related-item"
                           >
-                            <span class="related-platform">
-                              {{ getPlatformLabel(item.platform) }}
+                            <span class="related-platform-icon">
+                              <img
+                                :src="getFilterIcon(item.platform)"
+                                :alt="getPlatformLabel(item.platform)"
+                                class="related-platform-img"
+                              />
                             </span>
                             <span class="related-title-text">{{ item.title }}</span>
                           </a>
@@ -99,7 +103,7 @@
                 class="filter-btn"
                 :class="{ active: selectedPlatform === option.value }"
                 :style="getFilterStyle(option.value as Platform | '')"
-                @click="selectedPlatform = (option.value as Platform | '')"
+                @click="selectedPlatform = option.value as Platform | ''"
               >
                 {{ option.label }}
               </button>
@@ -167,8 +171,53 @@
   <Teleport to="body">
     <div v-if="showVoiceModal" class="voice-modal-overlay" @click.self="closeVoiceModal">
       <div class="voice-modal-card">
-        <p class="voice-modal-text">敬请期待</p>
-        <button class="voice-modal-btn" @click="closeVoiceModal">确定</button>
+        <div class="voice-modal-header">
+          <h3 class="voice-modal-title">语音输入</h3>
+          <button class="voice-modal-close" @click="closeVoiceModal">✕</button>
+        </div>
+        <div class="voice-modal-content">
+          <div v-if="isListening" class="voice-listening">
+            <div class="voice-animation">
+              <div class="voice-wave"></div>
+              <div class="voice-wave"></div>
+              <div class="voice-wave"></div>
+            </div>
+            <p class="voice-status-text">正在聆听...</p>
+            <p class="voice-hint">请开始说话</p>
+          </div>
+          <div v-else-if="voiceError" class="voice-error">
+            <p class="voice-error-text">{{ voiceError }}</p>
+          </div>
+          <div v-else class="voice-ready">
+            <p class="voice-ready-text">点击开始按钮开始语音输入</p>
+          </div>
+          <div v-if="finalTranscript || interimTranscript" class="voice-transcript">
+            <p class="transcript-label">识别结果：</p>
+            <p class="transcript-text">{{ finalTranscript || interimTranscript }}</p>
+          </div>
+        </div>
+        <div class="voice-modal-actions">
+          <button v-if="isListening" class="voice-modal-btn voice-stop-btn" @click="stopListening">
+            停止
+          </button>
+          <button
+            v-else-if="!voiceError"
+            class="voice-modal-btn voice-start-btn"
+            @click="openVoiceModal"
+          >
+            重新开始
+          </button>
+          <button
+            v-if="finalTranscript"
+            class="voice-modal-btn voice-confirm-btn"
+            @click="closeVoiceModal"
+          >
+            确认使用
+          </button>
+          <button class="voice-modal-btn voice-cancel-btn" @click="closeVoiceModal">
+            {{ finalTranscript ? '取消' : '关闭' }}
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -271,7 +320,7 @@ interface ChatItem {
 }
 
 const question = ref('')
-const selectedPlatform = ref<Platform | '' | null>('') 
+const selectedPlatform = ref<Platform | '' | null>('')
 const chatHistory = ref<ChatItem[]>([])
 const chatContainerRef = ref<HTMLElement | null>(null)
 const isAsking = ref(false)
@@ -280,12 +329,110 @@ const searchSuggestions = ref<string[]>([])
 const loadingSuggestions = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 const showVoiceModal = ref(false)
+const isListening = ref(false)
+const recognition: any = ref(null)
+const voiceError = ref('')
+const interimTranscript = ref('')
+const finalTranscript = ref('')
+
 const openVoiceModal = () => {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    voiceError.value = '您的浏览器不支持语音识别功能，请使用Chrome、Edge等现代浏览器'
+    showVoiceModal.value = true
+    return
+  }
+
+  const SpeechRecognition =
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  recognition.value = new SpeechRecognition()
+  recognition.value.continuous = false
+  recognition.value.interimResults = true
+  recognition.value.lang = 'zh-CN'
+
+  recognition.value.onstart = () => {
+    isListening.value = true
+    voiceError.value = ''
+    interimTranscript.value = ''
+    finalTranscript.value = ''
+  }
+
+  recognition.value.onresult = (event: any) => {
+    let interim = ''
+    let final = ''
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript
+      if (event.results[i].isFinal) {
+        final += transcript
+      } else {
+        interim += transcript
+      }
+    }
+
+    interimTranscript.value = interim
+    finalTranscript.value = final
+  }
+
+  recognition.value.onerror = (event: any) => {
+    console.error('语音识别错误:', event.error)
+    isListening.value = false
+    switch (event.error) {
+      case 'no-speech':
+        voiceError.value = '未检测到语音，请重试'
+        break
+      case 'audio-capture':
+        voiceError.value = '无法访问麦克风，请检查权限设置'
+        break
+      case 'not-allowed':
+        voiceError.value = '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问'
+        break
+      default:
+        voiceError.value = '语音识别出错，请重试'
+    }
+  }
+
+  recognition.value.onend = () => {
+    isListening.value = false
+    if (finalTranscript.value) {
+      question.value = finalTranscript.value
+      closeVoiceModal()
+    }
+  }
+
   showVoiceModal.value = true
+  try {
+    recognition.value.start()
+  } catch (error) {
+    console.error('启动语音识别失败:', error)
+    voiceError.value = '启动语音识别失败，请重试'
+    isListening.value = false
+  }
 }
 
 const closeVoiceModal = () => {
+  if (recognition.value && isListening.value) {
+    try {
+      recognition.value.stop()
+    } catch (error) {
+      console.error('停止语音识别失败:', error)
+    }
+  }
+  isListening.value = false
   showVoiceModal.value = false
+  interimTranscript.value = ''
+  finalTranscript.value = ''
+  voiceError.value = ''
+}
+
+const stopListening = () => {
+  if (recognition.value && isListening.value) {
+    try {
+      recognition.value.stop()
+    } catch (error) {
+      console.error('停止语音识别失败:', error)
+    }
+  }
+  isListening.value = false
 }
 
 const platformOptions = [
@@ -358,7 +505,17 @@ const handleExampleQuestion = (exampleQ: string) => {
   handleAskQuestion()
 }
 
-const platformBreakKeywords = ['微博', '抖音', 'B站', 'Bilibili', '今日头条', '头条', '全部平台', '全平台', '多平台']
+const platformBreakKeywords = [
+  '微博',
+  '抖音',
+  'B站',
+  'Bilibili',
+  '今日头条',
+  '头条',
+  '全部平台',
+  '全平台',
+  '多平台',
+]
 
 const formatAnswerText = (answer?: string) => {
   if (!answer) return ''
@@ -388,7 +545,8 @@ const formatAnswerText = (answer?: string) => {
   return formatted
 }
 
-const findChatItemByStreamId = (streamId: string) => chatHistory.value.find((chat) => chat.streamId === streamId)
+const findChatItemByStreamId = (streamId: string) =>
+  chatHistory.value.find((chat) => chat.streamId === streamId)
 
 const handleStreamStart = (event: Event) => {
   const detail = (event as CustomEvent<QnaStreamStartDetail>).detail
@@ -499,7 +657,7 @@ const handleAskQuestion = async () => {
 const retryQuestion = async (index: number) => {
   const chatItem = chatHistory.value[index]
   if (!chatItem) return
-  
+
   chatItem.loading = true
   chatItem.error = undefined
 
@@ -857,13 +1015,13 @@ const handleSearchSuggestion = (suggestion: string) => {
 .related-searches {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 .related-title {
   font-size: 14px;
   font-weight: 700;
-  color: #4b3829;
+  color: rgba(75, 56, 41, 0.9);
   margin: 0 0 12px 0;
 }
 
@@ -878,31 +1036,41 @@ const handleSearchSuggestion = (suggestion: string) => {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.5);
+  background: transparent;
   border-radius: 8px;
   text-decoration: none;
   transition: all 0.3s ease;
 }
 
 .related-item:hover {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.18);
   transform: translateX(4px);
 }
 
-.related-platform {
-  padding: 4px 10px;
-  background: linear-gradient(135deg, #ffd89d, #f49d5c);
-  color: #4a2e1c;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 700;
+.related-platform-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.related-platform-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.2));
+  opacity: 0.9;
 }
 
 .related-title-text {
   flex: 1;
   font-size: 13px;
-  color: #4b3829;
+  color: rgba(75, 56, 41, 0.88);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1106,30 +1274,199 @@ const handleSearchSuggestion = (suggestion: string) => {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 20px;
-  min-width: 260px;
+  min-width: 360px;
+  max-width: 500px;
 }
 
-.voice-modal-text {
-  font-size: 18px;
+.voice-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.voice-modal-title {
+  font-size: 20px;
   color: #4b3829;
   font-weight: 700;
+  margin: 0;
+}
+
+.voice-modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  font-size: 18px;
+  color: #4b3829;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.voice-modal-close:hover {
+  background: rgba(75, 56, 41, 0.1);
+}
+
+.voice-modal-content {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.voice-listening {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.voice-animation {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-wave {
+  width: 12px;
+  height: 40px;
+  background: linear-gradient(135deg, #f7c38a, #f4956c);
+  border-radius: 6px;
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+.voice-wave:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.voice-wave:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.voice-status-text {
+  font-size: 18px;
+  color: #4b3829;
+  font-weight: 600;
+  margin: 0;
+}
+
+.voice-hint {
+  font-size: 14px;
+  color: rgba(75, 56, 41, 0.7);
+  margin: 0;
+}
+
+.voice-error {
+  text-align: center;
+}
+
+.voice-error-text {
+  font-size: 16px;
+  color: #e74c3c;
+  font-weight: 600;
+  margin: 0;
+}
+
+.voice-ready {
+  text-align: center;
+}
+
+.voice-ready-text {
+  font-size: 16px;
+  color: #4b3829;
+  margin: 0;
+}
+
+.voice-transcript {
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  border: 1px solid rgba(75, 56, 41, 0.2);
+}
+
+.transcript-label {
+  font-size: 14px;
+  color: rgba(75, 56, 41, 0.7);
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.transcript-text {
+  font-size: 16px;
+  color: #4b3829;
+  margin: 0;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.voice-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .voice-modal-btn {
-  padding: 8px 32px;
+  padding: 10px 24px;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #f7c38a, #f4956c);
-  color: #4b3829;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: all 0.2s ease;
+  font-size: 15px;
 }
 
-.voice-modal-btn:hover {
+.voice-start-btn,
+.voice-confirm-btn {
+  background: linear-gradient(135deg, #f7c38a, #f4956c);
+  color: #4b3829;
+}
+
+.voice-start-btn:hover,
+.voice-confirm-btn:hover {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(247, 195, 138, 0.4);
+}
+
+.voice-stop-btn {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: #fff;
+}
+
+.voice-stop-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.voice-cancel-btn {
+  background: rgba(75, 56, 41, 0.1);
+  color: #4b3829;
+}
+
+.voice-cancel-btn:hover {
+  background: rgba(75, 56, 41, 0.2);
 }
 
 .send-btn {
@@ -1245,13 +1582,19 @@ const handleSearchSuggestion = (suggestion: string) => {
 
 @keyframes glow-pulse {
   0% {
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.4);
+    box-shadow:
+      0 0 10px rgba(255, 255, 255, 0.8),
+      0 0 20px rgba(255, 255, 255, 0.4);
   }
   50% {
-    box-shadow: 0 0 25px rgba(255, 255, 255, 0.6), 0 0 50px rgba(255, 255, 255, 0.3);
+    box-shadow:
+      0 0 25px rgba(255, 255, 255, 0.6),
+      0 0 50px rgba(255, 255, 255, 0.3);
   }
   100% {
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 255, 255, 0.3);
+    box-shadow:
+      0 0 20px rgba(255, 255, 255, 0.6),
+      0 0 40px rgba(255, 255, 255, 0.3);
   }
 }
 
