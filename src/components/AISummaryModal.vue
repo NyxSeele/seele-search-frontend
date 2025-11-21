@@ -114,7 +114,9 @@ const dragStart = (e: MouseEvent | TouchEvent) => {
   if (!target.closest('.modal-header')) return
 
   if (e.type === 'touchstart') {
-    const touch = (e as TouchEvent).touches[0]
+    const touchEvent = e as TouchEvent
+    const touch = touchEvent.touches[0]
+    if (!touch) return
     initialX.value = touch.clientX - xOffset.value
     initialY.value = touch.clientY - yOffset.value
   } else {
@@ -131,7 +133,9 @@ const drag = (e: MouseEvent | TouchEvent) => {
   e.preventDefault()
 
   if (e.type === 'touchmove') {
-    const touch = (e as TouchEvent).touches[0]
+    const touchEvent = e as TouchEvent
+    const touch = touchEvent.touches[0]
+    if (!touch) return
     currentX.value = touch.clientX - initialX.value
     currentY.value = touch.clientY - initialY.value
   } else {

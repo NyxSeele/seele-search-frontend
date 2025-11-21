@@ -189,28 +189,43 @@ export function sortWithPlatformBalance(items: HotSearchItem[]): HotSearchItem[]
   
   // 获取所有平台
   const platforms = Object.keys(platformGroups) as Platform[]
+  if (platforms.length === 0) {
+    return sorted
+  }
   
   // 穿插算法：轮流从每个平台取一条
   const result: HotSearchItem[] = []
-  const platformIndexes: Record<Platform, number> = {} as Record<Platform, number>
-  platforms.forEach(p => platformIndexes[p] = 0)
+  const platformIndexes: Partial<Record<Platform, number>> = {}
+  platforms.forEach(p => (platformIndexes[p] = 0))
   
   // 前40条使用穿插逻辑
   let currentPlatformIndex = 0
   while (result.length < 40 && result.length < sorted.length) {
     const platform = platforms[currentPlatformIndex % platforms.length]
+    if (!platform) break
     const group = platformGroups[platform]
-    const index = platformIndexes[platform]
+    if (!group || group.length === 0) {
+      currentPlatformIndex++
+      continue
+    }
+    const index = platformIndexes[platform] ?? 0
     
     if (index < group.length) {
-      result.push(group[index])
-      platformIndexes[platform]++
+      const item = group[index]
+      if (item) {
+        result.push(item)
+      }
+      platformIndexes[platform] = index + 1
     }
     
     currentPlatformIndex++
     
     // 防止死循环：如果所有平台都没有数据了就退出
-    if (platforms.every(p => platformIndexes[p] >= platformGroups[p].length)) {
+    if (platforms.every(p => {
+      const groupLength = platformGroups[p]?.length ?? 0
+      const used = platformIndexes[p] ?? 0
+      return used >= groupLength
+    })) {
       break
     }
   }
