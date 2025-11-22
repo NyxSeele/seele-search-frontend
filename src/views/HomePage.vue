@@ -12,7 +12,7 @@
             <img src="/static/icons/heat.png" alt="查看热搜" class="heat-icon" />
             <div class="heat-bubble">
               <img src="/static/icons/bubble.png" alt="气泡" class="bubble-img" />
-              <span class="bubble-text">点我查看热搜哦</span>
+              <span class="bubble-text">点我查看热搜哦♪</span>
             </div>
           </div>
         </div>
@@ -143,7 +143,7 @@
         <img src="/static/icons/thinking.png" alt="AI" class="fab-icon-img" />
       </button>
       <div v-if="showQnaTooltip" class="qna-tooltip">
-        {{ qnaPanelVisible ? '点我也可以关闭提问哦' : '有什么问题都可以点我哦' }}
+        {{ qnaPanelVisible ? '点我也可以关闭提问哦♪' : '有什么问题都可以点我哦♪' }}
       </div>
     </div>
 
@@ -158,7 +158,7 @@
         <img src="/static/icons/kiana.png" alt="Kiana" class="fab-icon-img" />
       </button>
       <div v-if="showKianaTooltip" class="kiana-tooltip">
-        点我查看崩坏3最新公告
+        点我查看崩坏3最新公告哦
       </div>
     </div>
 
@@ -614,7 +614,7 @@ const handleKianaClick = async () => {
   // 显示崩坏3公告卡片
   honkaiModalVisible.value = true
   hideKianaTooltipTemporarily()
-  
+
   if (honkaiItems.value.length === 0) {
     await loadHonkaiData()
   }

@@ -1,13 +1,13 @@
 import axios from 'axios'
 import type { AxiosInstance } from 'axios'
 
-// 使用相对路径，让浏览器自动使用当前域名
-// 开发环境：Vite 代理会转发到后端 (localhost:5173 -> localhost:8080)
-// 生产环境：Nginx 代理会转发到后端
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+// FC后端地址配置
+// 开发环境：可以使用本地地址或FC地址
+// 生产环境：使用FC地址
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://seele-backend-wvwyqdxjct.cn-hangzhou.fcapp.run'
 
-// 如果没有配置 API_BASE_URL，则使用相对路径（依赖 Vite 代理）
-// 如果配置了 API_BASE_URL，则使用绝对 URL（需要后端配置 CORS）
+// 如果配置了环境变量 VITE_API_BASE_URL，则使用环境变量
+// 否则使用默认的FC地址
 
 console.log('[API Config] Base URL:', API_BASE_URL)
 

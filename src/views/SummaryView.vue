@@ -147,7 +147,7 @@ const handleKianaClick = async () => {
   // 显示崩坏3公告卡片
   honkaiModalVisible.value = true
   hideKianaTooltipTemporarily()
-  
+
   if (honkaiItems.value.length === 0) {
     await loadHonkaiData()
   }
@@ -380,7 +380,7 @@ watch(
       <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
         <img src="/static/icons/thinking.png" alt="AI" class="fab-icon-img" />
       </button>
-      <div v-if="showQnaTooltip" class="qna-tooltip">有什么问题都可以点我哦</div>
+      <div v-if="showQnaTooltip" class="qna-tooltip">有什么问题都可以点我哦♪</div>
     </div>
 
     <!-- Kiana按钮（崩坏3公告） -->
@@ -394,7 +394,7 @@ watch(
         <img src="/static/icons/kiana.png" alt="Kiana" class="fab-icon-img" />
       </button>
       <div v-if="showKianaTooltip" class="kiana-tooltip">
-        点我查看崩坏3最新公告
+        点我查看崩坏3最新公告哦
       </div>
     </div>
 

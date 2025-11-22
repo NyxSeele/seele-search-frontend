@@ -1,7 +1,40 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import LoadingPage from '@/components/LoadingPage.vue'
+
+const isLoading = ref(true)
+
+onMounted(() => {
+  // 等待页面资源加载完成
+  const checkLoadComplete = () => {
+    if (document.readyState === 'complete') {
+      // 额外等待一小段时间确保所有资源都已加载
+      setTimeout(() => {
+        isLoading.value = false
+      }, 800)
+    } else {
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          isLoading.value = false
+        }, 800)
+      })
+    }
+  }
+  
+  checkLoadComplete()
+  
+  // 设置最大加载时间，防止无限加载
+  setTimeout(() => {
+    if (isLoading.value) {
+      isLoading.value = false
+    }
+  }, 10000) // 10秒后强制完成加载
+})
+</script>
 
 <template>
   <div class="app-shell">
+    <LoadingPage :is-loading="isLoading" />
     <router-view />
   </div>
 </template>
