@@ -4,12 +4,25 @@ import type { AxiosInstance } from 'axios'
 // FC后端地址配置
 // 开发环境：可以使用本地地址或FC地址
 // 生产环境：使用FC地址
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://seele-backend-wvwyqdxjct.cn-hangzhou.fcapp.run'
+// 注意：FC函数的HTTP触发器地址是固定的，不会因重新部署而改变
+const DEFAULT_FC_URL = 'https://seele-backend-rxdelkqjxi.cn-hangzhou.fcapp.run'
 
-// 如果配置了环境变量 VITE_API_BASE_URL，则使用环境变量
-// 否则使用默认的FC地址
+// 强制使用绝对URL，防止被环境变量覆盖为相对路径
+let API_BASE_URL = DEFAULT_FC_URL
+const envUrl = import.meta.env.VITE_API_BASE_URL
+if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '' && envUrl.startsWith('http')) {
+  // 只接受以 http 开头的绝对URL
+  API_BASE_URL = envUrl.trim()
+} else {
+  // 确保使用默认的FC地址（绝对URL）
+  API_BASE_URL = DEFAULT_FC_URL
+}
+
+// 如果配置了环境变量 VITE_API_BASE_URL 且为有效的绝对URL，则使用环境变量
+// 否则使用默认的FC地址（强制绝对URL）
 
 console.log('[API Config] Base URL:', API_BASE_URL)
+console.log('[API Config] Environment Variable:', import.meta.env.VITE_API_BASE_URL)
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -23,7 +36,14 @@ const apiClient: AxiosInstance = axios.create({
 // 请求拦截器
 apiClient.interceptors.request.use(
   (config) => {
-    console.log('[API Request]', config.method?.toUpperCase(), config.url)
+    // 调试信息：显示完整的请求URL
+    const fullUrl = config.baseURL + (config.url || '')
+    console.log('[API Request]', config.method?.toUpperCase(), fullUrl)
+    console.log('[API Config]', {
+      baseURL: config.baseURL,
+      url: config.url,
+      fullUrl: fullUrl
+    })
     return config
   },
   (error) => {
