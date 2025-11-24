@@ -34,7 +34,27 @@
           @click="handleItemClick(item)"
         >
           <div class="col-rank">
-            <span class="rank-number" :class="getRankClass(index)">{{ index + 1 }}</span>
+            <span v-if="index >= 3" class="rank-number">{{ index + 1 }}</span>
+            <div v-else class="rank-icon-container">
+              <img
+                v-if="index === 0"
+                src="/static/icons/1st.png"
+                alt="第1名"
+                class="rank-icon rank-1st"
+              />
+              <img
+                v-else-if="index === 1"
+                src="/static/icons/2dn.png"
+                alt="第2名"
+                class="rank-icon rank-2nd"
+              />
+              <img
+                v-else-if="index === 2"
+                src="/static/icons/3rd.png"
+                alt="第3名"
+                class="rank-icon rank-3rd"
+              />
+            </div>
           </div>
           <div class="col-title">
             <span class="title-text">{{ item.title }}</span>
@@ -94,12 +114,6 @@ const handleViewAllClick = () => {
   emit('view-all')
 }
 
-const getRankClass = (index: number) => {
-  if (index === 0) return 'rank-1'
-  if (index === 1) return 'rank-2'
-  if (index === 2) return 'rank-3'
-  return ''
-}
 
 const getPlatformLabel = (platform: Platform) => {
   const map: Record<Platform, string> = {
@@ -153,10 +167,46 @@ const handleItemClick = (item: HotSearchItem) => {
 }
 
 .loading-gif {
-  width: 80px;
-  height: 80px;
-  margin-bottom: 16px;
+  width: 100px;
+  height: 100px;
+  margin-bottom: 20px;
   object-fit: contain;
+}
+
+/* PC端加载样式保持不变 */
+@media (min-width: 769px) {
+  .list-loading {
+    min-height: 400px;
+    padding: 60px 20px;
+  }
+
+  .loading-gif {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 20px;
+  }
+
+  .list-loading p {
+    font-size: 16px;
+  }
+}
+
+/* 移动端加载样式 - 只占列表区域 */
+@media (max-width: 768px) {
+  .list-loading {
+    padding: 0.3rem 0.2rem;
+    min-height: 1.5rem;
+  }
+
+  .loading-gif {
+    width: 0.6rem;
+    height: 0.6rem;
+    margin-bottom: 0.12rem;
+  }
+
+  .list-loading p {
+    font-size: 0.12rem;
+  }
 }
 
 .loading-spinner {
@@ -186,12 +236,14 @@ const handleItemClick = (item: HotSearchItem) => {
   border-radius: 24px;
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  max-height: 600px;
+  overflow-y: auto;
 }
 
 .table-header {
   display: grid;
-  grid-template-columns: 80px 1fr 140px 140px;
-  padding: 20px 28px;
+  grid-template-columns: 100px 1fr 140px 140px;
+  padding: 12px 28px;
   background: transparent;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 16px;
@@ -276,8 +328,8 @@ const handleItemClick = (item: HotSearchItem) => {
 
 .table-row {
   display: grid;
-  grid-template-columns: 80px 1fr 140px 140px;
-  padding: 20px 28px;
+  grid-template-columns: 100px 1fr 140px 140px;
+  padding: 14px 30px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -302,26 +354,48 @@ const handleItemClick = (item: HotSearchItem) => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 36px;
-  font-size: 18px;
+  min-width: 50px;
+  height: 50px;
+  font-size: 20px;
   font-weight: 900;
-  color: #888;
+  color: #000;
+  background: transparent;
 }
 
-.rank-number.rank-1 {
-  color: #ff4757;
-  font-size: 24px;
+.rank-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin: 0;
+  padding: 0;
 }
 
-.rank-number.rank-2 {
-  color: #ff7f50;
-  font-size: 22px;
+.rank-icon {
+  object-fit: contain;
 }
 
-.rank-number.rank-3 {
-  color: #ffa502;
-  font-size: 21px;
+.rank-icon.rank-1st {
+  width: 65px;
+  height: 65px;
+  margin-left: -5px;
+}
+
+.rank-icon.rank-2nd {
+  width: 60px;
+  height: 60px;
+  margin-left: -2px;
+}
+
+.rank-icon.rank-3rd {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-65%, -50%);
+  width: 48px;
+  height: 48px;
 }
 
 .col-title {
@@ -409,30 +483,58 @@ const handleItemClick = (item: HotSearchItem) => {
 @media (max-width: 768px) {
   .table-header,
   .table-row {
-    grid-template-columns: 45px 1fr 85px 70px;
-    padding: 12px 12px;
+    grid-template-columns: 0.7rem 1fr 0.85rem 0.7rem;
+    padding: 0.12rem;
   }
 
   .table-header {
-    font-size: 13px;
+    font-size: 0.13rem;
   }
 
   .rank-number {
-    min-width: 28px;
-    height: 28px;
-    font-size: 14px;
+    min-width: 0.44rem;
+    height: 0.44rem;
+    font-size: 0.16rem;
   }
 
-  .rank-number.rank-1 {
-    font-size: 16px;
+  .rank-icon-container {
+    width: 0.5rem;
+    height: 0.5rem;
   }
 
-  .rank-number.rank-2 {
-    font-size: 15px;
+  .rank-icon.rank-1st {
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+
+  .rank-icon.rank-2nd {
+    width: 0.42rem;
+    height: 0.42rem;
+  }
+
+  .rank-icon.rank-3rd {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-65%, -50%);
+    width: 0.38rem;
+    height: 0.38rem;
   }
 
   .title-text {
-    font-size: 14px;
+    font-size: 0.14rem;
+  }
+
+  .inline-view-all {
+    bottom: 0.12rem;
+    gap: 0.04rem;
+    padding: 0.04rem 0.08rem;
+    font-size: 0.12rem;
+  }
+
+  .view-all-icon {
+    width: 0.24rem;
+    height: 0.24rem;
   }
 }
 </style>

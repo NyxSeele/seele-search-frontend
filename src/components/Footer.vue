@@ -31,11 +31,12 @@
 
 @media (max-width: 768px) {
   .app-footer {
-    padding: 10px 16px;
+    padding: calc(0.06rem + env(safe-area-inset-bottom)) 0.12rem;
+    padding-bottom: calc(0.06rem + env(safe-area-inset-bottom));
   }
 
   .copyright {
-    font-size: 11px;
+    font-size: 0.1rem;
   }
 }
 </style>

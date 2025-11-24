@@ -15,16 +15,18 @@
           </div>
           <div class="modal-content">
             <div v-if="loading" class="modal-loading">
-              <div class="loading-spinner"></div>
+              <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
               <p>加载中...</p>
             </div>
 
-            <div v-else-if="error" class="modal-error">
-              <p>{{ error }}</p>
+            <div v-else-if="error" class="modal-loading">
+              <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+              <p>加载中...</p>
             </div>
 
-            <div v-else-if="items.length === 0" class="modal-empty">
-              <p>暂无数据</p>
+            <div v-else-if="items.length === 0" class="modal-loading">
+              <img src="/static/icons/loading.gif" alt="加载中" class="loading-gif" />
+              <p>加载中...</p>
             </div>
 
             <div v-else class="hot-list">
@@ -34,7 +36,27 @@
                 class="hot-item"
                 @click="handleItemClick(item)"
               >
-                <span class="item-rank" :class="getRankClass(index)">{{ index + 1 }}</span>
+                <span v-if="index >= 3" class="item-rank">{{ index + 1 }}</span>
+                <div v-else class="item-rank-container">
+                  <img
+                    v-if="index === 0"
+                    src="/static/icons/1st.png"
+                    alt="第1名"
+                    class="item-rank-icon rank-1st"
+                  />
+                  <img
+                    v-else-if="index === 1"
+                    src="/static/icons/2dn.png"
+                    alt="第2名"
+                    class="item-rank-icon rank-2nd"
+                  />
+                  <img
+                    v-else-if="index === 2"
+                    src="/static/icons/3rd.png"
+                    alt="第3名"
+                    class="item-rank-icon rank-3rd"
+                  />
+                </div>
                 <div class="item-content">
                   <div class="item-title">{{ item.title }}</div>
                   <div class="item-meta">
@@ -114,12 +136,6 @@ const getPlatformIcon = (platform: Platform) => {
   return map[platform]
 }
 
-const getRankClass = (index: number) => {
-  if (index === 0) return 'rank-1'
-  if (index === 1) return 'rank-2'
-  if (index === 2) return 'rank-3'
-  return ''
-}
 
 const handleItemClick = (item: HotSearchItem) => {
   if (item.url) {
@@ -216,8 +232,8 @@ onBeforeUnmount(() => {
   left: -5px;
   top: 70%;
   transform: translateY(-50%);
-  width: 90px;
-  height: 90px;
+  width: 60px;
+  height: 60px;
   object-fit: contain;
 }
 
@@ -298,9 +314,7 @@ onBeforeUnmount(() => {
   -ms-overflow-style: none;
 }
 
-.modal-loading,
-.modal-error,
-.modal-empty {
+.modal-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -309,22 +323,45 @@ onBeforeUnmount(() => {
   color: #666;
 }
 
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #667eea;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 12px;
+.loading-gif {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 20px;
+  object-fit: contain;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
+/* PC端加载样式保持不变 */
+@media (min-width: 769px) {
+  .modal-loading {
+    height: 400px;
   }
-  to {
-    transform: rotate(360deg);
+  
+  .loading-gif {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 20px;
+  }
+  
+  .modal-loading p {
+    font-size: 16px;
+  }
+}
+
+/* 移动端加载样式 - 只占卡片区域 */
+@media (max-width: 768px) {
+  .modal-loading {
+    height: 2rem;
+    min-height: 2rem;
+  }
+  
+  .loading-gif {
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-bottom: 0.1rem;
+  }
+  
+  .modal-loading p {
+    font-size: 0.14rem;
   }
 }
 
@@ -356,41 +393,53 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 35px;
-  height: 35px;
-  background: rgba(0, 0, 0, 0.05);
-  color: #555;
-  border-radius: 10px;
-  font-size: 15px;
+  min-width: 50px;
+  height: 50px;
+  color: #000;
+  font-size: 18px;
   font-weight: 900;
   flex-shrink: 0;
-  border: 2px solid rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
-.item-rank.rank-1 {
-  background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(255, 215, 0, 0.5);
-  border: 2px solid #ffd700;
-  transform: scale(1.1);
+.item-rank-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
 }
 
-.item-rank.rank-2 {
-  background: linear-gradient(135deg, #c0c0c0 0%, #a8a8a8 100%);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(192, 192, 192, 0.5);
-  border: 2px solid #c0c0c0;
-  transform: scale(1.08);
+.item-rank-icon {
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
-.item-rank.rank-3 {
-  background: linear-gradient(135deg, #cd7f32 0%, #b87333 100%);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(205, 127, 50, 0.5);
-  border: 2px solid #cd7f32;
-  transform: scale(1.05);
+.item-rank-icon.rank-1st {
+  width: 65px;
+  height: 65px;
+  margin-left: -5px;
+}
+
+.item-rank-icon.rank-2nd {
+  width: 60px;
+  height: 60px;
+  margin-left: -2px;
+}
+
+.item-rank-icon.rank-3rd {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-65%, -50%);
+  width: 48px;
+  height: 48px;
 }
 
 .item-content {
@@ -493,22 +542,88 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
-  .modal-container {
-    max-width: 100%;
-    max-height: 100vh;
-    border-radius: 0;
+  .modal-overlay {
+    padding: 0.1rem;
   }
 
-  .modal-header {
-    padding: 20px;
+  .modal-container {
+    max-width: 75%;
+    max-height: 70vh;
+    border-radius: 0.2rem;
+    width: 75%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .modal-header-bar {
+    padding: 0.12rem 0.16rem 0;
   }
 
   .modal-title {
-    font-size: 18px;
+    font-size: 0.16rem;
+  }
+
+  .modal-header-text {
+    font-size: 0.1rem;
   }
 
   .hot-item {
-    padding: 12px 20px;
+    padding: 0.1rem 0.14rem;
+    gap: 0.08rem;
+  }
+
+  .item-rank {
+    min-width: 0.4rem;
+    height: 0.4rem;
+    font-size: 0.14rem;
+  }
+
+  .item-rank-container {
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+
+  .item-rank-icon.rank-1st {
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: -0.02rem;
+  }
+
+  .item-rank-icon.rank-2nd {
+    width: 0.38rem;
+    height: 0.38rem;
+    margin-left: -0.02rem;
+  }
+
+  .item-rank-icon.rank-3rd {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-65%, -50%);
+    width: 0.35rem;
+    height: 0.35rem;
+  }
+
+  .item-platform-icon {
+    width: 0.18rem;
+    height: 0.18rem;
+  }
+
+  .item-title {
+    font-size: 0.13rem;
+  }
+
+  .item-heat {
+    font-size: 0.11rem;
+  }
+
+  .item-category {
+    font-size: 0.1rem;
+  }
+
+  .modal-rank-icon {
+    width: 0.5rem;
+    height: 0.5rem;
   }
 }
 </style>

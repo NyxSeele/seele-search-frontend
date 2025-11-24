@@ -39,7 +39,7 @@
               v-model="searchQuery"
               type="text"
               class="search-input"
-              placeholder="搜索任何内容..."
+              placeholder="新的一天从一场美妙的邂逅开始 ♪ "
               @focus="showSuggestions = true"
               @input="handleSearchInput"
               @keyup.enter="handleSearch"
@@ -137,6 +137,7 @@
       class="qna-fab-container"
       :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
       @mousedown="handleQnaMouseDown"
+      @touchstart="handleQnaTouchStart"
       @mouseenter="handleQnaMouseEnter"
     >
       <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
@@ -152,6 +153,7 @@
       class="kiana-fab-container"
       :style="{ transform: `translate(${kianaFabPosition.x}px, ${kianaFabPosition.y}px)` }"
       @mousedown="handleKianaMouseDown"
+      @touchstart="handleKianaTouchStart"
       @mouseenter="handleKianaMouseEnter"
     >
       <button class="kiana-fab" @click="handleKianaClick" title="崩坏3最新公告">
@@ -296,76 +298,82 @@ const interimTranscript = ref('')
 const finalTranscript = ref('')
 
 const openVoiceModal = () => {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    voiceError.value = '您的浏览器不支持语音识别功能，请使用Chrome、Edge等现代浏览器'
-    showVoiceModal.value = true
-    return
-  }
+  try {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      voiceError.value = '您的浏览器不支持语音识别功能，请使用Chrome、Edge等现代浏览器'
+      showVoiceModal.value = true
+      return
+    }
 
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-  recognition.value = new SpeechRecognition()
-  recognition.value.continuous = false
-  recognition.value.interimResults = true
-  recognition.value.lang = 'zh-CN'
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    recognition.value = new SpeechRecognition()
+    recognition.value.continuous = false
+    recognition.value.interimResults = true
+    recognition.value.lang = 'zh-CN'
 
-  recognition.value.onstart = () => {
-    isListening.value = true
-    voiceError.value = ''
-    interimTranscript.value = ''
-    finalTranscript.value = ''
-  }
+    recognition.value.onstart = () => {
+      isListening.value = true
+      voiceError.value = ''
+      interimTranscript.value = ''
+      finalTranscript.value = ''
+    }
 
-  recognition.value.onresult = (event: any) => {
-    let interim = ''
-    let final = ''
+    recognition.value.onresult = (event: any) => {
+      let interim = ''
+      let final = ''
 
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript
-      if (event.results[i].isFinal) {
-        final += transcript
-      } else {
-        interim += transcript
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          final += transcript
+        } else {
+          interim += transcript
+        }
+      }
+
+      interimTranscript.value = interim
+      finalTranscript.value = final
+    }
+
+    recognition.value.onerror = (event: any) => {
+      console.error('语音识别错误:', event.error)
+      isListening.value = false
+      switch (event.error) {
+        case 'no-speech':
+          voiceError.value = '未检测到语音，请重试'
+          break
+        case 'audio-capture':
+          voiceError.value = '无法访问麦克风，请检查权限设置'
+          break
+        case 'not-allowed':
+          voiceError.value = '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问'
+          break
+        default:
+          voiceError.value = '语音识别出错，请重试'
       }
     }
 
-    interimTranscript.value = interim
-    finalTranscript.value = final
-  }
-
-  recognition.value.onerror = (event: any) => {
-    console.error('语音识别错误:', event.error)
-    isListening.value = false
-    switch (event.error) {
-      case 'no-speech':
-        voiceError.value = '未检测到语音，请重试'
-        break
-      case 'audio-capture':
-        voiceError.value = '无法访问麦克风，请检查权限设置'
-        break
-      case 'not-allowed':
-        voiceError.value = '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问'
-        break
-      default:
-        voiceError.value = '语音识别出错，请重试'
+    recognition.value.onend = () => {
+      isListening.value = false
+      if (finalTranscript.value) {
+        searchQuery.value = finalTranscript.value
+        closeVoiceModal()
+        handleSearch()
+      }
     }
-  }
 
-  recognition.value.onend = () => {
-    isListening.value = false
-    if (finalTranscript.value) {
-      searchQuery.value = finalTranscript.value
-      closeVoiceModal()
-      handleSearch()
+    showVoiceModal.value = true
+    try {
+      recognition.value.start()
+    } catch (error) {
+      console.error('启动语音识别失败:', error)
+      voiceError.value = '启动语音识别失败，请重试'
+      isListening.value = false
     }
-  }
-
-  showVoiceModal.value = true
-  try {
-    recognition.value.start()
   } catch (error) {
-    console.error('启动语音识别失败:', error)
-    voiceError.value = '启动语音识别失败，请重试'
-    isListening.value = false
+    console.error('语音识别初始化失败:', error)
+    voiceError.value = '语音识别功能初始化失败，请重试'
+    showVoiceModal.value = true
   }
 }
 
@@ -567,7 +575,11 @@ const hideTooltipTemporarily = () => {
 }
 
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
+  try {
+    document.addEventListener('click', handleClickOutside)
+  } catch (error) {
+    console.error('事件监听器添加失败:', error)
+  }
 })
 
 const handleKianaMouseDown = (e: MouseEvent) => {
@@ -606,6 +618,98 @@ const handleKianaMouseUp = () => {
   document.removeEventListener('mouseup', handleKianaMouseUp)
 }
 
+// Touch事件处理 - QNA
+const handleQnaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isDragging.value = true
+  hasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  dragStart.value = {
+    x: touch.clientX - qnaFabPosition.value.x,
+    y: touch.clientY - qnaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleQnaTouchMove)
+  document.addEventListener('touchend', handleQnaTouchEnd)
+}
+
+const handleQnaTouchMove = (e: TouchEvent) => {
+  if (!isDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - dragStart.value.x,
+    y: touch.clientY - dragStart.value.y,
+  }
+  const deltaX = nextPosition.x - qnaFabPosition.value.x
+  const deltaY = nextPosition.y - qnaFabPosition.value.y
+  if (!hasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      hasDragged.value = true
+    }
+  }
+  if (hasDragged.value) {
+    qnaFabPosition.value = nextPosition
+  }
+}
+
+const handleQnaTouchEnd = (e: TouchEvent) => {
+  isDragging.value = false
+  document.removeEventListener('touchmove', handleQnaTouchMove)
+  document.removeEventListener('touchend', handleQnaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!hasDragged.value) {
+    handleQnaClick()
+  }
+}
+
+// Touch事件处理 - Kiana
+const handleKianaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isKianaDragging.value = true
+  kianaHasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  kianaDragStart.value = {
+    x: touch.clientX - kianaFabPosition.value.x,
+    y: touch.clientY - kianaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleKianaTouchMove)
+  document.addEventListener('touchend', handleKianaTouchEnd)
+}
+
+const handleKianaTouchMove = (e: TouchEvent) => {
+  if (!isKianaDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - kianaDragStart.value.x,
+    y: touch.clientY - kianaDragStart.value.y,
+  }
+  const deltaX = nextPosition.x - kianaFabPosition.value.x
+  const deltaY = nextPosition.y - kianaFabPosition.value.y
+  if (!kianaHasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      kianaHasDragged.value = true
+    }
+  }
+  if (kianaHasDragged.value) {
+    kianaFabPosition.value = nextPosition
+  }
+}
+
+const handleKianaTouchEnd = (e: TouchEvent) => {
+  isKianaDragging.value = false
+  document.removeEventListener('touchmove', handleKianaTouchMove)
+  document.removeEventListener('touchend', handleKianaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!kianaHasDragged.value) {
+    handleKianaClick()
+  }
+}
+
 const handleKianaClick = async () => {
   if (kianaHasDragged.value) {
     kianaHasDragged.value = false
@@ -623,6 +727,7 @@ const handleKianaClick = async () => {
 const loadHonkaiData = async () => {
   honkaiLoading.value = true
   honkaiError.value = ''
+  
   try {
     const response = await hotSearchApi.getHonkaiHotSearch()
     honkaiItems.value = response.data || []
@@ -699,7 +804,7 @@ onBeforeUnmount(() => {
   width: 335px;
   height: 335px;
   background: url('/static/icons/LOGO3.png') no-repeat center center;
-  background-size: contain;
+  background-size: 100% 100%;
   margin: 40px auto 20px;
   position: relative;
   top: 50px;
@@ -986,36 +1091,160 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .title-gradient {
-    font-size: 40px;
+    font-size: 0.4rem;
   }
 
   .title-subtitle {
-    font-size: 16px;
+    font-size: 0.16rem;
+  }
+
+  .search-box-wrapper {
+    height: 0.5rem;
+    padding: 0 0.16rem;
   }
 
   .search-input {
-    padding: 14px 20px;
-    font-size: 14px;
+    padding: 0.1rem 0.16rem;
+    font-size: 0.14rem;
+    min-height: 0.4rem;
+    line-height: 0.3rem;
+  }
+
+  .search-input::placeholder {
+    font-size: 0.11rem;
+  }
+
+  /* QNA和Kiana按钮样式 - 使用HotSearchView.vue的样式 */
+  .qna-fab-container {
+    position: fixed !important;
+    bottom: clamp(40px, 6vh, 60px) !important;
+    right: clamp(20px, 3vw, 32px) !important;
+    z-index: 1000 !important;
+    cursor: move !important;
+    user-select: none !important;
+  }
+
+  .kiana-fab-container {
+    position: fixed !important;
+    bottom: clamp(40px, 6vh, 60px) !important;
+    left: clamp(20px, 3vw, 32px) !important;
+    z-index: 1000 !important;
+    cursor: move !important;
+    user-select: none !important;
+  }
+
+  .qna-fab,
+  .kiana-fab {
+    width: 90px !important;
+    height: 90px !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+  }
+
+  .qna-fab:hover,
+  .kiana-fab:hover {
+    transform: translateY(-4px) scale(1.1) !important;
+    box-shadow: none !important;
+  }
+
+  .qna-fab:active,
+  .kiana-fab:active {
+    transform: translateY(-2px) scale(1.02) !important;
+  }
+
+  .qna-fab:hover + .qna-tooltip,
+  .kiana-fab:hover + .kiana-tooltip {
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+
+  .qna-fab .fab-icon-img,
+  .kiana-fab .fab-icon-img {
+    width: 82px !important;
+    height: 82px !important;
+    animation: pulse 2s ease-in-out infinite !important;
+    pointer-events: none !important;
+  }
+
+  .qna-tooltip {
+    position: absolute !important;
+    bottom: 80px !important;
+    right: -30px !important;
+    background: url('/static/icons/bubble.png') no-repeat center center !important;
+    background-size: contain !important;
+    background-color: transparent !important;
+    color: #ffb3d9 !important;
+    padding: 20px 28px 16px !important;
+    border-radius: 0 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    box-shadow: none !important;
+    animation: tooltipBounce 3s ease-in-out infinite !important;
+    pointer-events: none !important;
+    z-index: 999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 50px !important;
+    min-width: 150px !important;
+  }
+
+  .kiana-tooltip {
+    position: absolute !important;
+    bottom: 80px !important;
+    left: -30px !important;
+    background: url('/static/icons/bubble.png') no-repeat center center !important;
+    background-size: contain !important;
+    background-color: transparent !important;
+    color: #ffb3d9 !important;
+    padding: 20px 28px 16px !important;
+    border-radius: 0 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    box-shadow: none !important;
+    animation: tooltipBounce 3s ease-in-out infinite !important;
+    pointer-events: none !important;
+    z-index: 999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 50px !important;
+    min-width: 150px !important;
+  }
+
+  .qna-tooltip::after,
+  .kiana-tooltip::after {
+    display: none !important;
   }
 
   .heat-icon {
-    width: 110px;
-    height: 110px;
+    width: 1rem;
+    height: 1rem;
   }
 
   .bubble-img {
-    width: 180px;
+    width: 1.6rem;
   }
 
   .bubble-text {
-    font-size: 17px;
+    font-size: 0.15rem;
   }
 }
 
 /* AI提问悬浮按钮容器 */
 .qna-fab-container {
   position: fixed;
-  bottom: 100px;
+  bottom: 120px;
   right: 32px;
   z-index: 1000;
   cursor: move;
@@ -1025,7 +1254,7 @@ onBeforeUnmount(() => {
 /* Kiana按钮容器 */
 .kiana-fab-container {
   position: fixed;
-  bottom: 100px;
+  bottom: 120px;
   left: 32px;
   z-index: 1000;
   cursor: move;
@@ -1088,6 +1317,10 @@ onBeforeUnmount(() => {
 
 .qna-tooltip::after {
   display: none;
+  top: 100%;
+  right: 20px;
+  border: 6px solid transparent;
+  border-top-color: rgba(37, 99, 235, 0.95);
 }
 
 @keyframes tooltipBounce {
@@ -1170,8 +1403,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 50px;
-  min-width: 150px;
 }
 
 .kiana-tooltip::after {

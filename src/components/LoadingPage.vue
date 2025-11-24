@@ -9,7 +9,7 @@
         <div class="loading-text">加载中</div>
         <div class="loading-progress">
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: `${progress}%` }"></div>
+            <div class="progress-icon" :style="{ left: `clamp(0px, calc(${progress}% - 20px), calc(100% - 40px))` }"></div>
           </div>
           <div class="progress-text">{{ Math.round(progress) }}%</div>
         </div>
@@ -29,16 +29,20 @@ const props = defineProps<{
 
 // 当加载完成时，防止body滚动
 watch(() => props.isLoading, (newVal) => {
-  if (newVal) {
-    document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.width = '100%'
-    document.body.style.height = '100%'
-  } else {
-    document.body.style.overflow = ''
-    document.body.style.position = ''
-    document.body.style.width = ''
-    document.body.style.height = ''
+  try {
+    if (newVal) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+      document.body.style.height = '100%'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.height = ''
+    }
+  } catch (error) {
+    console.error('body样式设置失败:', error)
   }
 }, { immediate: true })
 
@@ -47,8 +51,9 @@ let progressInterval: number | null = null
 
 // 计算加载进度
 const calculateProgress = () => {
-  // 检查页面资源加载状态
-  if (document.readyState === 'complete') {
+  try {
+    // 检查页面资源加载状态
+    if (document.readyState === 'complete') {
     // 页面已完全加载，检查关键资源
     const images = document.querySelectorAll('img')
     const totalImages = images.length
@@ -73,6 +78,9 @@ const calculateProgress = () => {
     return 20
   }
   return 10
+  } catch (error) {
+    return 50
+  }
 }
 
 // 更新进度
@@ -94,36 +102,41 @@ onMounted(() => {
   // 初始进度
   progress.value = 0
   
-  // 监听页面加载事件
-  const handleLoad = () => {
-    // 确保进度达到100%
-    progress.value = 100
-    if (progressInterval) {
-      clearInterval(progressInterval)
-      progressInterval = null
-    }
-  }
-  
-  // 如果页面已经加载完成
-  if (document.readyState === 'complete') {
-    progress.value = 90
-    setTimeout(() => {
+  try {
+    // 监听页面加载事件
+    const handleLoad = () => {
+      // 确保进度达到100%
       progress.value = 100
-    }, 300)
-  } else {
-    window.addEventListener('load', handleLoad, { once: true })
-    
-    // 定期更新进度
-    progressInterval = window.setInterval(() => {
-      updateProgress()
-      if (progress.value >= 99) {
-        progress.value = 100
-        if (progressInterval) {
-          clearInterval(progressInterval)
-          progressInterval = null
-        }
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
       }
-    }, 150) as unknown as number
+    }
+    
+    // 如果页面已经加载完成
+    if (document.readyState === 'complete') {
+      progress.value = 90
+      setTimeout(() => {
+        progress.value = 100
+      }, 300)
+    } else {
+      window.addEventListener('load', handleLoad, { once: true })
+      
+      // 定期更新进度
+      progressInterval = window.setInterval(() => {
+        updateProgress()
+        if (progress.value >= 99) {
+          progress.value = 100
+          if (progressInterval) {
+            clearInterval(progressInterval)
+            progressInterval = null
+          }
+        }
+      }, 150) as unknown as number
+    }
+  } catch (error) {
+    console.error('进度条初始化失败:', error)
+    progress.value = 100
   }
   
   // 快速提升初始进度，模拟加载过程
@@ -195,9 +208,17 @@ body:has(.loading-page) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 0.2rem;
   width: auto;
   padding: 0;
+  box-sizing: border-box;
+}
+
+/* PC端专属优化 */
+@media (min-width: 769px) {
+  .loading-content {
+    gap: 0.15rem;
+  }
 }
 
 .loading-animation {
@@ -205,136 +226,178 @@ body:has(.loading-page) {
   align-items: center;
   justify-content: center;
   width: auto;
+  height: auto;
 }
 
 .loading-gif {
-  width: 180px;
-  height: auto;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
+  display: block;
+  visibility: visible;
+  opacity: 1;
 }
 
 .loading-text {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #228B22;
-  letter-spacing: 0.1em;
+  font-size: 18px;
+  font-weight: 600;
+  color: #4b3829;
+  letter-spacing: 0.05em;
+  text-align: center;
+  width: auto;
+  box-sizing: border-box;
 }
 
 .loading-progress {
   width: 450px;
+  max-width: 90%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.8rem;
+  justify-content: center;
+  gap: 0.2rem;
 }
 
 .progress-bar {
   width: 100%;
-  height: 40px;
+  height: 50px;
   background-image: url('/static/icons/long banner.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
 }
 
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    rgba(6, 147, 95, 0.9) 0%,
-    rgba(25, 183, 72, 0.83) 50%,
-    rgba(9, 160, 42, 0.865) 100%
-  );
-  border-radius: 8px;
-  transition: width 0.3s ease-out;
-  position: relative;
-}
-
-.progress-fill::after {
-  content: '';
+.progress-icon {
   position: absolute;
-  top: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  background-image: url('/static/icons/main.png');
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: left 0.3s ease-out;
+  z-index: 10;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(14, 218, 167, 0.3) 50%,
-    transparent 100%
-  );
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  max-width: calc(100% - 50px);
+  box-sizing: border-box;
 }
 
 .progress-text {
-  font-size: 1.2rem;
+  font-size: 18px;
   font-weight: bold;
-  color: #228B22;
+  color: #1f701f;
   letter-spacing: 0.05em;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: -12px;
+}
+
+/* PC端专属优化 */
+@media (min-width: 769px) {
+  .loading-gif {
+    width: 120px;
+    height: 120px;
+  }
+
+  .loading-text {
+    font-size: 22px;
+  }
+
+  .loading-progress {
+    width: 550px;
+    gap: 0.15rem;
+  }
+
+  .progress-bar {
+    height: 60px;
+  }
+
+  .progress-icon {
+    width: 60px;
+    height: 60px;
+    max-width: calc(100% - 60px);
+  }
+
+  .progress-text {
+    font-size: 20px;
+    margin-top: -20px;
+  }
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .loading-content {
-    gap: 1.5rem;
+    gap: 0.15rem;
   }
   
   .loading-gif {
-    width: 150px;
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-bottom: 0.16rem;
   }
   
   .loading-text {
-    font-size: 1.8rem;
+    font-size: 0.16rem;
+    color: #4b3829;
   }
   
   .loading-progress {
-    width: 350px;
+    width: 3.5rem;
   }
   
   .progress-bar {
-    height: 35px;
+    height: 0.35rem;
+  }
+
+  .progress-icon {
+    width: 0.35rem;
+    height: 0.35rem;
+    max-width: calc(100% - 0.35rem);
   }
   
   .progress-text {
-    font-size: 1.1rem;
+    font-size: 0.18rem;
   }
 }
 
 @media (max-width: 480px) {
   .loading-content {
-    gap: 1.2rem;
+    gap: 0.12rem;
   }
   
   .loading-gif {
-    width: 120px;
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-bottom: 0.16rem;
   }
   
   .loading-text {
-    font-size: 1.5rem;
+    font-size: 0.16rem;
+    color: #4b3829;
   }
   
   .loading-progress {
-    width: 280px;
+    width: 3rem;
   }
   
   .progress-bar {
-    height: 30px;
+    height: 0.35rem;
+  }
+
+  .progress-icon {
+    width: 0.35rem;
+    height: 0.35rem;
+    max-width: calc(100% - 0.35rem);
   }
   
   .progress-text {
-    font-size: 1rem;
+    font-size: 0.18rem;
   }
 }
 

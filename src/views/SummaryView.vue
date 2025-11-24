@@ -6,6 +6,7 @@ import FullListModal from '@/components/FullListModal.vue'
 import { pushSummaryToQnaPanel } from '@/utils/qnaSummary'
 import hotSearchApi from '@/api/hotSearch'
 import type { HotSearchItem } from '@/types'
+import { Platform } from '@/types'
 
 const aiStore = useAIStore()
 
@@ -139,6 +140,98 @@ const handleKianaMouseUp = () => {
   document.removeEventListener('mouseup', handleKianaMouseUp)
 }
 
+// Touch事件处理 - QNA
+const handleQnaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isDragging.value = true
+  hasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  dragStart.value = {
+    x: touch.clientX - qnaFabPosition.value.x,
+    y: touch.clientY - qnaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleQnaTouchMove)
+  document.addEventListener('touchend', handleQnaTouchEnd)
+}
+
+const handleQnaTouchMove = (e: TouchEvent) => {
+  if (!isDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - dragStart.value.x,
+    y: touch.clientY - dragStart.value.y,
+  }
+  const deltaX = nextPosition.x - qnaFabPosition.value.x
+  const deltaY = nextPosition.y - qnaFabPosition.value.y
+  if (!hasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      hasDragged.value = true
+    }
+  }
+  if (hasDragged.value) {
+    qnaFabPosition.value = nextPosition
+  }
+}
+
+const handleQnaTouchEnd = (e: TouchEvent) => {
+  isDragging.value = false
+  document.removeEventListener('touchmove', handleQnaTouchMove)
+  document.removeEventListener('touchend', handleQnaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!hasDragged.value) {
+    handleQnaClick()
+  }
+}
+
+// Touch事件处理 - Kiana
+const handleKianaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isKianaDragging.value = true
+  kianaHasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  kianaDragStart.value = {
+    x: touch.clientX - kianaFabPosition.value.x,
+    y: touch.clientY - kianaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleKianaTouchMove)
+  document.addEventListener('touchend', handleKianaTouchEnd)
+}
+
+const handleKianaTouchMove = (e: TouchEvent) => {
+  if (!isKianaDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - kianaDragStart.value.x,
+    y: touch.clientY - kianaDragStart.value.y,
+  }
+  const deltaX = nextPosition.x - kianaFabPosition.value.x
+  const deltaY = nextPosition.y - kianaFabPosition.value.y
+  if (!kianaHasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      kianaHasDragged.value = true
+    }
+  }
+  if (kianaHasDragged.value) {
+    kianaFabPosition.value = nextPosition
+  }
+}
+
+const handleKianaTouchEnd = (e: TouchEvent) => {
+  isKianaDragging.value = false
+  document.removeEventListener('touchmove', handleKianaTouchMove)
+  document.removeEventListener('touchend', handleKianaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!kianaHasDragged.value) {
+    handleKianaClick()
+  }
+}
+
 const handleKianaClick = async () => {
   if (kianaHasDragged.value) {
     kianaHasDragged.value = false
@@ -156,6 +249,7 @@ const handleKianaClick = async () => {
 const loadHonkaiData = async () => {
   honkaiLoading.value = true
   honkaiError.value = ''
+  
   try {
     const response = await hotSearchApi.getHonkaiHotSearch()
     honkaiItems.value = response.data || []
@@ -375,6 +469,7 @@ watch(
       class="qna-fab-container"
       :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
       @mousedown="handleQnaMouseDown"
+      @touchstart="handleQnaTouchStart"
       @mouseenter="handleQnaMouseEnter"
     >
       <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
@@ -388,6 +483,7 @@ watch(
       class="kiana-fab-container"
       :style="{ transform: `translate(${kianaFabPosition.x}px, ${kianaFabPosition.y}px)` }"
       @mousedown="handleKianaMouseDown"
+      @touchstart="handleKianaTouchStart"
       @mouseenter="handleKianaMouseEnter"
     >
       <button class="kiana-fab" @click="handleKianaClick" title="崩坏3最新公告">
@@ -745,6 +841,67 @@ watch(
 
 .kiana-tooltip::after {
   display: none;
+}
+
+@media (max-width: 768px) {
+  .qna-fab-container,
+  .kiana-fab-container {
+    touch-action: none;
+  }
+
+  .qna-fab-container {
+    bottom: clamp(40px, 6vh, 60px) !important;
+    right: clamp(20px, 3vw, 0.15rem) !important;
+  }
+
+  .kiana-fab-container {
+    bottom: clamp(40px, 6vh, 60px) !important;
+    left: clamp(20px, 3vw, 0.15rem) !important;
+  }
+
+  .qna-fab,
+  .kiana-fab {
+    width: 0.64rem;
+    height: 0.64rem;
+    min-width: 0.64rem;
+    min-height: 0.64rem;
+  }
+
+  .qna-fab .fab-icon-img,
+  .kiana-fab .fab-icon-img {
+    width: 0.48rem;
+    height: 0.48rem;
+  }
+
+  .qna-tooltip {
+    font-size: 0.1rem;
+    padding: 0.08rem 0.14rem;
+    min-width: fit-content;
+    min-height: 0.32rem;
+    background-size: 100% 100%;
+    white-space: nowrap;
+    line-height: 1.2;
+    right: -0.15rem;
+    bottom: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .kiana-tooltip {
+    font-size: 0.1rem;
+    padding: 0.08rem 0.14rem;
+    min-width: fit-content;
+    min-height: 0.32rem;
+    background-size: 100% 100%;
+    white-space: nowrap;
+    line-height: 1.2;
+    left: -0.15rem;
+    bottom: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 </style>
 

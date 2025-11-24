@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Navbar from '@/components/Navbar.vue'
 import HotSearchCard from '@/components/HotSearchCard.vue'
 import AggregateCard from '@/components/AggregateCard.vue'
@@ -68,6 +68,7 @@ const honkaiItems = ref<HotSearchItem[]>([])
 const honkaiLoading = ref(false)
 const honkaiError = ref('')
 const platformRetryTimers: Partial<Record<Platform, ReturnType<typeof setTimeout> | null>> = {}
+
 const platformDisplayNames: Record<Platform, string> = {
   [Platform.WEIBO]: '微博',
   [Platform.TOUTIAO]: '今日头条',
@@ -181,6 +182,98 @@ const handleKianaMouseUp = () => {
   document.removeEventListener('mouseup', handleKianaMouseUp)
 }
 
+// Touch事件处理 - QNA
+const handleQnaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isDragging.value = true
+  hasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  dragStart.value = {
+    x: touch.clientX - qnaFabPosition.value.x,
+    y: touch.clientY - qnaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleQnaTouchMove)
+  document.addEventListener('touchend', handleQnaTouchEnd)
+}
+
+const handleQnaTouchMove = (e: TouchEvent) => {
+  if (!isDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - dragStart.value.x,
+    y: touch.clientY - dragStart.value.y,
+  }
+  const deltaX = nextPosition.x - qnaFabPosition.value.x
+  const deltaY = nextPosition.y - qnaFabPosition.value.y
+  if (!hasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      hasDragged.value = true
+    }
+  }
+  if (hasDragged.value) {
+    qnaFabPosition.value = nextPosition
+  }
+}
+
+const handleQnaTouchEnd = (e: TouchEvent) => {
+  isDragging.value = false
+  document.removeEventListener('touchmove', handleQnaTouchMove)
+  document.removeEventListener('touchend', handleQnaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!hasDragged.value) {
+    handleQnaClick()
+  }
+}
+
+// Touch事件处理 - Kiana
+const handleKianaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isKianaDragging.value = true
+  kianaHasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  kianaDragStart.value = {
+    x: touch.clientX - kianaFabPosition.value.x,
+    y: touch.clientY - kianaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleKianaTouchMove)
+  document.addEventListener('touchend', handleKianaTouchEnd)
+}
+
+const handleKianaTouchMove = (e: TouchEvent) => {
+  if (!isKianaDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - kianaDragStart.value.x,
+    y: touch.clientY - kianaDragStart.value.y,
+  }
+  const deltaX = nextPosition.x - kianaFabPosition.value.x
+  const deltaY = nextPosition.y - kianaFabPosition.value.y
+  if (!kianaHasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      kianaHasDragged.value = true
+    }
+  }
+  if (kianaHasDragged.value) {
+    kianaFabPosition.value = nextPosition
+  }
+}
+
+const handleKianaTouchEnd = (e: TouchEvent) => {
+  isKianaDragging.value = false
+  document.removeEventListener('touchmove', handleKianaTouchMove)
+  document.removeEventListener('touchend', handleKianaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!kianaHasDragged.value) {
+    handleKianaClick()
+  }
+}
+
 const handleKianaClick = async () => {
   if (kianaHasDragged.value) {
     kianaHasDragged.value = false
@@ -198,6 +291,7 @@ const handleKianaClick = async () => {
 const loadHonkaiData = async () => {
   honkaiLoading.value = true
   honkaiError.value = ''
+  
   try {
     const response = await hotSearchApi.getHonkaiHotSearch()
     honkaiItems.value = response.data || []
@@ -305,6 +399,7 @@ const loadPlatformData = async (platform: Platform, silent = false) => {
     loadingRef.value = true
   }
   errorRef.value = ''
+  
   try {
     const response = await hotSearchApi.getHotSearches({ platform })
     console.log(`📊 ${platform}平台原始数据:`, response.length, '条')
@@ -369,6 +464,7 @@ const loadAggregateData = async (silent = false) => {
     aggregateLoading.value = true
   }
   aggregateError.value = ''
+  
   try {
     // 获取所有平台数据（不等待，避免一个失败导致全部失败）
     const [weiboData, TOUTIAOData, bilibiliData, douyinData] = await Promise.allSettled([
@@ -426,7 +522,7 @@ const handleViewAll = async (platform: Platform) => {
   modalVisible.value = true
   modalLoading.value = true
   modalError.value = ''
-
+  
   try {
     const response = await hotSearchApi.getHotSearches({ platform })
     console.log(`📊 ${platform}平台原始数据:`, response.length, '条')
@@ -565,6 +661,89 @@ const stopAutoRefresh = () => {
   console.log('🛑 停止自动刷新')
 }
 
+// 3D圆柱旋转相关状态
+// 简单的滑动展示
+const currentSlideIndex = ref(0)
+const slideTouchStartX = ref(0)
+const slideTouchStartTranslateX = ref(0)
+const translateX = ref(0)
+const isSlideDragging = ref(false)
+const CARD_COUNT = 5
+
+// 滑动阈值降低，更容易触发滑动
+const SWIPE_THRESHOLD = 30 // 降低从50到30，更容易触发
+const MIN_SWIPE_DISTANCE = 50 // 最小滑动距离
+
+const handleSlideTouchStart = (e: TouchEvent) => {
+  if (window.innerWidth > 768) return
+  const touch = e.touches[0]
+  if (!touch) return
+  slideTouchStartX.value = touch.clientX
+  slideTouchStartTranslateX.value = translateX.value
+  isSlideDragging.value = true
+}
+
+const handleSlideTouchMove = (e: TouchEvent) => {
+  if (!isSlideDragging.value || window.innerWidth > 768) return
+  e.preventDefault()
+  const touch = e.touches[0]
+  if (!touch) return
+  const deltaX = touch.clientX - slideTouchStartX.value
+  const screenWidth = window.innerWidth
+  const maxTranslate = -(CARD_COUNT - 1) * screenWidth
+  translateX.value = Math.max(maxTranslate, Math.min(0, slideTouchStartTranslateX.value + deltaX))
+}
+
+const handleSlideTouchEnd = () => {
+  if (window.innerWidth > 768) return
+  isSlideDragging.value = false
+  // 吸附到最近的卡片 - 降低阈值，更容易切换
+  const screenWidth = window.innerWidth
+  const absDeltaX = Math.abs(translateX.value - slideTouchStartTranslateX.value)
+  const deltaX = slideTouchStartTranslateX.value - translateX.value // 计算滑动方向：正数向左，负数向右
+  
+  // 如果滑动距离足够，切换到下一张/上一张
+  if (absDeltaX > MIN_SWIPE_DISTANCE) {
+    if (deltaX > 0) {
+      // 向左滑动，显示下一张
+      slideToIndex(Math.min(CARD_COUNT - 1, currentSlideIndex.value + 1))
+    } else {
+      // 向右滑动，显示上一张
+      slideToIndex(Math.max(0, currentSlideIndex.value - 1))
+    }
+  } else {
+    // 滑动距离不够，吸附到当前卡片
+    const targetIndex = Math.round(-translateX.value / screenWidth)
+    const clampedIndex = Math.max(0, Math.min(CARD_COUNT - 1, targetIndex))
+    slideToIndex(clampedIndex)
+  }
+}
+
+const slideToIndex = (index: number) => {
+  currentSlideIndex.value = index
+  const screenWidth = window.innerWidth
+  translateX.value = -index * screenWidth
+}
+
+// 移动端数据限制：大卡片7条，小卡片8条
+const isMobile = computed(() => window.innerWidth <= 768)
+const mobileAggregateItems = computed(() => {
+  return isMobile.value ? aggregateItems.value.slice(0, 7) : aggregateItems.value
+})
+const mobileWeiboItems = computed(() => {
+  return isMobile.value ? weiboItems.value.slice(0, 8) : weiboItems.value
+})
+const mobileTOUTIAOItems = computed(() => {
+  return isMobile.value ? TOUTIAOItems.value.slice(0, 8) : TOUTIAOItems.value
+})
+const mobileBilibiliItems = computed(() => {
+  return isMobile.value ? bilibiliItems.value.slice(0, 8) : bilibiliItems.value
+})
+const mobileDouyinItems = computed(() => {
+  return isMobile.value ? douyinItems.value.slice(0, 8) : douyinItems.value
+})
+
+
 onMounted(async () => {
   // 初始加载所有数据（并行加载，提高速度）
   console.log('🚀 页面加载，开始获取数据...')
@@ -597,7 +776,8 @@ onBeforeUnmount(() => {
     <Navbar />
 
     <main class="page-content">
-      <div class="hot-search-container">
+      <!-- PC端布局 -->
+      <div class="hot-search-container pc-layout">
         <!-- 左上 - 微博 -->
         <div class="corner-card top-left">
           <HotSearchCard
@@ -668,6 +848,91 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
+
+      <!-- 移动端简单滑动布局 -->
+      <div class="mobile-slide-container">
+        <div 
+          class="slide-wrapper" 
+          :data-index="currentSlideIndex"
+          :style="{ transform: `translateX(${translateX}px)` }"
+          @touchstart="handleSlideTouchStart"
+          @touchmove="handleSlideTouchMove"
+          @touchend="handleSlideTouchEnd"
+        >
+          <!-- 卡片1 - 聚合 -->
+          <div class="slide-card">
+            <AggregateCard
+              :items="mobileAggregateItems"
+              :loading="aggregateLoading"
+              :error="aggregateError"
+              :show-view-all="true"
+              @view-all="handleViewAllAggregate"
+              @refresh="loadAggregateData"
+              @ai-summary="handleGlobalAISummary"
+            />
+          </div>
+
+          <!-- 卡片2 - 微博 -->
+          <div class="slide-card">
+            <HotSearchCard
+              :platform="Platform.WEIBO"
+              :items="mobileWeiboItems"
+              :loading="weiboLoading"
+              :error="weiboError"
+              :show-view-all="true"
+              @view-all="handleViewAll(Platform.WEIBO)"
+              @refresh="loadPlatformData(Platform.WEIBO)"
+              @ai-summary="() => handlePlatformAISummary(Platform.WEIBO)"
+            />
+          </div>
+
+          <!-- 卡片3 - 今日头条 -->
+          <div class="slide-card">
+            <HotSearchCard
+              :platform="Platform.TOUTIAO"
+              :items="mobileTOUTIAOItems"
+              :loading="TOUTIAOLoading"
+              :error="TOUTIAOError"
+              :show-view-all="true"
+              @view-all="handleViewAll(Platform.TOUTIAO)"
+              @refresh="loadPlatformData(Platform.TOUTIAO)"
+              @ai-summary="() => handlePlatformAISummary(Platform.TOUTIAO)"
+            />
+          </div>
+
+          <!-- 卡片4 - B站 -->
+          <div class="slide-card">
+            <HotSearchCard
+              :platform="Platform.BILIBILI"
+              :items="mobileBilibiliItems"
+              :loading="bilibiliLoading"
+              :error="bilibiliError"
+              :show-view-all="true"
+              @view-all="handleViewAll(Platform.BILIBILI)"
+              @refresh="loadPlatformData(Platform.BILIBILI)"
+              @ai-summary="() => handlePlatformAISummary(Platform.BILIBILI)"
+            />
+          </div>
+
+          <!-- 卡片5 - 抖音 -->
+          <div class="slide-card">
+            <HotSearchCard
+              :platform="Platform.DOUYIN"
+              :items="mobileDouyinItems"
+              :loading="douyinLoading"
+              :error="douyinError"
+              :show-view-all="true"
+              @view-all="handleViewAll(Platform.DOUYIN)"
+              @refresh="loadPlatformData(Platform.DOUYIN)"
+              @ai-summary="() => handlePlatformAISummary(Platform.DOUYIN)"
+            />
+          </div>
+        </div>
+
+
+        <!-- 导航指示点 - 移动端隐藏 -->
+        <div class="slide-indicators" style="display: none;"></div>
+      </div>
     </main>
 
     <!-- 查看全部弹窗 -->
@@ -685,6 +950,7 @@ onBeforeUnmount(() => {
       class="qna-fab-container"
       :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
       @mousedown="handleQnaMouseDown"
+      @touchstart="handleQnaTouchStart"
       @mouseenter="handleQnaMouseEnter"
     >
       <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
@@ -700,6 +966,7 @@ onBeforeUnmount(() => {
       class="kiana-fab-container"
       :style="{ transform: `translate(${kianaFabPosition.x}px, ${kianaFabPosition.y}px)` }"
       @mousedown="handleKianaMouseDown"
+      @touchstart="handleKianaTouchStart"
       @mouseenter="handleKianaMouseEnter"
     >
       <button class="kiana-fab" @click="handleKianaClick" title="崩坏3最新公告">
@@ -820,6 +1087,12 @@ onBeforeUnmount(() => {
   background-size: contain;
   z-index: 5;
   animation: strongPulse 2.5s ease-in-out infinite;
+  transition: transform 0.3s ease;
+}
+
+.center-dashboard-icon:hover {
+  transform: translate(-50%, calc(-50% - 340px)) scale(1.1);
+  animation: none;
 }
 
 @keyframes strongPulse {
@@ -829,6 +1102,13 @@ onBeforeUnmount(() => {
   }
   50% {
     transform: translate(-50%, calc(-50% - 340px)) scale(0.95);
+  }
+}
+
+@media (min-width: 769px) {
+  /* PC端隐藏移动端布局 */
+  .mobile-slide-container {
+    display: none;
   }
 }
 
@@ -852,36 +1132,451 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  /* PC布局隐藏 */
+  .pc-layout {
+    display: none;
+  }
+
+  /* 移动端简单滑动容器 - 完全响应式 */
+  .mobile-slide-container {
+    position: relative;
+    width: 100vw;
+    min-height: 60vh;
+    margin-top: clamp(0.4rem, 3vw, 0.8rem);
+    padding: 0 clamp(0.2rem, 2vw, 0.5rem) clamp(0.3rem, 3vw, 0.6rem);
+    overflow: hidden;
+    touch-action: pan-x; /* 只允许横向滑动，纵向由列表内部处理 */
+  }
+
+  .slide-wrapper {
+    display: flex;
+    width: 500%;
+    transition: transform 0.3s ease-out;
+    will-change: transform;
+    touch-action: pan-x; /* 允许横向滑动 */
+  }
+
+  .slide-card {
+    width: 20%;
+    flex-shrink: 0;
+    padding: 0 clamp(0.1rem, 1vw, 0.2rem);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+    transform-origin: center;
+    min-height: 50vh; /* 使用vh确保基础高度 */
+  }
+
+  /* 当前卡片正常大小 */
+  .slide-card:nth-child(1) {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  /* 下一个卡片缩小预览 */
+  .slide-card:nth-child(2) {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+
+  /* 其他卡片更小 */
+  .slide-card:nth-child(n+3) {
+    transform: scale(0.7);
+    opacity: 0.5;
+  }
+
+  /* 根据当前索引动态调整 */
+  .slide-wrapper[data-index="0"] .slide-card:nth-child(1) { transform: scale(1); opacity: 1; }
+  .slide-wrapper[data-index="0"] .slide-card:nth-child(2) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="0"] .slide-card:nth-child(n+3) { transform: scale(0.7); opacity: 0.5; }
+
+  .slide-wrapper[data-index="1"] .slide-card:nth-child(1) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="1"] .slide-card:nth-child(2) { transform: scale(1); opacity: 1; }
+  .slide-wrapper[data-index="1"] .slide-card:nth-child(3) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="1"] .slide-card:nth-child(n+4) { transform: scale(0.7); opacity: 0.5; }
+
+  .slide-wrapper[data-index="2"] .slide-card:nth-child(1) { transform: scale(0.7); opacity: 0.5; }
+  .slide-wrapper[data-index="2"] .slide-card:nth-child(2) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="2"] .slide-card:nth-child(3) { transform: scale(1); opacity: 1; }
+  .slide-wrapper[data-index="2"] .slide-card:nth-child(4) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="2"] .slide-card:nth-child(5) { transform: scale(0.7); opacity: 0.5; }
+
+  .slide-wrapper[data-index="3"] .slide-card:nth-child(1) { transform: scale(0.7); opacity: 0.5; }
+  .slide-wrapper[data-index="3"] .slide-card:nth-child(2) { transform: scale(0.7); opacity: 0.5; }
+  .slide-wrapper[data-index="3"] .slide-card:nth-child(3) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="3"] .slide-card:nth-child(4) { transform: scale(1); opacity: 1; }
+  .slide-wrapper[data-index="3"] .slide-card:nth-child(5) { transform: scale(0.85); opacity: 0.7; }
+
+  .slide-wrapper[data-index="4"] .slide-card:nth-child(1) { transform: scale(0.7); opacity: 0.5; }
+  .slide-wrapper[data-index="4"] .slide-card:nth-child(2) { transform: scale(0.7); opacity: 0.5; }
+  .slide-wrapper[data-index="4"] .slide-card:nth-child(3) { transform: scale(0.7); opacity: 0.5; }
+  .slide-wrapper[data-index="4"] .slide-card:nth-child(4) { transform: scale(0.85); opacity: 0.7; }
+  .slide-wrapper[data-index="4"] .slide-card:nth-child(5) { transform: scale(1); opacity: 1; }
+
+  /* 卡片样式 - 完全响应式，使用相对单位 */
+  .slide-card :deep(.card),
+  .slide-card :deep(.aggregate-card) {
+    width: 100% !important;
+    height: auto !important;
+    min-height: unset !important; /* 移除固定最小高度，让内容自适应 */
+    max-height: 85vh !important; /* 限制最大高度，避免超出屏幕 */
+    display: flex !important;
+    flex-direction: column !important;
+    padding-bottom: 0 !important; /* 移除底部内边距 */
+  }
+
+  /* 主卡片（聚合卡片）恢复背景 */
+  .slide-card:first-child :deep(.aggregate-card) {
+    background: url('/static/images/card.png') no-repeat center center !important;
+    background-size: 100% 100% !important;
+    border: none !important;
+    box-shadow: 0 12px 48px rgba(102, 126, 234, 0.25) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* 其他卡片保持透明 */
+  .slide-card:not(:first-child) :deep(.card) {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* 卡片内容区域 - 完全响应式 */
+  .slide-card :deep(.card-content) {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: clamp(0.08rem, 1vw, 0.12rem) 0 !important;
+    height: auto !important;
+    min-height: 0 !important; /* 允许收缩 */
+    max-height: none !important;
+    background: transparent !important;
+    overflow-y: auto !important; /* 允许垂直滚动 */
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important; /* iOS平滑滚动 */
+    touch-action: pan-y !important; /* 允许垂直滑动 */
+  }
+
+  /* 卡片头部 */
+  .slide-card :deep(.card-header) {
+    flex: 0 0 auto !important;
+    margin-bottom: clamp(0.04rem, 0.5vw, 0.08rem) !important;
+  }
+
+  /* 热搜列表 - 响应式高度 */
+  .slide-card :deep(.hot-search-list),
+  .slide-card :deep(.data-list),
+  .slide-card :deep(.hot-list) {
+    flex: 1 1 auto !important;
+    min-height: 0 !important; /* 允许收缩 */
+    max-height: none !important; /* 移除最大高度限制，由父容器控制 */
+    overflow: visible !important; /* 不在这里设置overflow，由card-content控制 */
+    display: flex !important;
+    flex-direction: column !important;
+    gap: clamp(0.02rem, 0.3vw, 0.04rem) !important;
+    padding-bottom: 0 !important; /* 移除底部内边距 */
+  }
+
+  /* 列表项 - 响应式字体和间距 */
+  .slide-card :deep(.hot-item),
+  .slide-card :deep(.data-item) {
+    flex: 0 0 auto !important;
+    padding: clamp(0.04rem, 0.5vw, 0.06rem) 0 !important;
+    min-height: unset !important;
+    font-size: clamp(0.09rem, 2vw, 0.11rem) !important; /* 响应式字体 */
+    margin-bottom: 0 !important;
+  }
+
+  /* 底部按钮 */
+  .slide-card :deep(.card-footer),
+  .slide-card :deep(.view-all-btn) {
+    flex: 0 0 auto !important;
+    margin-top: clamp(0.02rem, 0.3vw, 0.04rem) !important; /* 减少上边距，往上移动 */
+    margin-bottom: 0 !important; /* 移除底部外边距 */
+    padding-bottom: 0 !important; /* 移除底部内边距 */
+  }
+
+  /* 加载状态 */
+  .slide-card :deep(.card-loading),
+  .slide-card :deep(.card-error),
+  .slide-card :deep(.card-empty) {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: unset !important;
+    padding: clamp(0.12rem, 1.5vw, 0.2rem) !important;
+  }
+
+  /* 导航指示点 - 移动端隐藏 */
+  .slide-indicators {
+    display: none !important;
+  }
+}
+
+/* 移动端小屏幕专属适配 - 完全响应式 */
+@media (max-width: 414px) {
+  .mobile-slide-container {
+    margin-top: clamp(0.3rem, 2vw, 0.6rem);
+    min-height: 55vh;
+  }
+
+  /* 小屏幕卡片基础高度 - 移除固定高度 */
+  .slide-card :deep(.card),
+  .slide-card :deep(.aggregate-card) {
+    min-height: unset !important;
+    max-height: 80vh !important;
+  }
+
+  /* 小屏幕列表最大高度调整 - 移除限制 */
+  .slide-card :deep(.hot-search-list),
+  .slide-card :deep(.data-list),
+  .slide-card :deep(.hot-list) {
+    max-height: none !important;
+  }
+}
+
+@media (max-width: 768px) {
   .corner-card {
-    width: 42%;
-    height: 300px;
+    width: 1.4rem;
+    height: 1.7rem;
+    position: absolute;
   }
 
   .center-card {
-    width: 60%;
-    height: 400px;
+    width: 1.7rem;
+    height: 2rem;
+    position: absolute;
+  }
+
+  .center-dashboard-icon {
+    width: 1.4rem;
+    height: 0.38rem;
   }
 
   .page-title {
-    font-size: 24px;
+    font-size: 0.24rem;
   }
 
   .page-subtitle {
-    font-size: 13px;
+    font-size: 0.16rem;
   }
 
-  .top-left,
-  .top-right,
-  .bottom-left,
+  .top-left {
+    top: 0.12rem;
+    left: 0.06rem;
+  }
+
+  .top-right {
+    top: 0.12rem;
+    right: 0.06rem;
+  }
+
+  .bottom-left {
+    bottom: 0.12rem;
+    left: 0.06rem;
+  }
+
   .bottom-right {
-    margin: 10px;
+    bottom: 0.12rem;
+    right: 0.06rem;
+  }
+
+  .center-card {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .qna-fab-container,
+  .kiana-fab-container {
+    touch-action: none;
+  }
+
+  /* QNA和Kiana按钮样式 - 完全响应式，往下移动 */
+  .qna-fab-container {
+    position: fixed;
+    bottom: clamp(40px, 6vh, 60px);
+    right: clamp(20px, 3vw, 32px);
+    z-index: 1000;
+    cursor: move;
+    user-select: none;
+    min-width: clamp(60px, 9vw, 90px); /* 增大触摸判定区域 */
+    min-height: clamp(60px, 9vw, 90px);
+    padding: clamp(4px, 0.5vw, 8px);
+  }
+
+  .kiana-fab-container {
+    position: fixed;
+    bottom: clamp(40px, 6vh, 60px);
+    left: clamp(20px, 3vw, 32px);
+    z-index: 1000;
+    cursor: move;
+    user-select: none;
+    min-width: clamp(60px, 9vw, 90px); /* 增大触摸判定区域 */
+    min-height: clamp(60px, 9vw, 90px);
+    padding: clamp(4px, 0.5vw, 8px);
+  }
+
+  .qna-fab,
+  .kiana-fab {
+    width: clamp(60px, 9vw, 90px);
+    height: clamp(60px, 9vw, 90px);
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .qna-fab:hover,
+  .kiana-fab:hover {
+    transform: translateY(-4px) scale(1.1);
+    box-shadow: none;
+  }
+
+  .qna-fab:active,
+  .kiana-fab:active {
+    transform: translateY(-2px) scale(1.02);
+  }
+
+  .qna-fab:hover + .qna-tooltip,
+  .kiana-fab:hover + .kiana-tooltip {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .qna-fab .fab-icon-img,
+  .kiana-fab .fab-icon-img {
+    width: clamp(54px, 8vw, 82px);
+    height: clamp(54px, 8vw, 82px);
+    animation: pulse 2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .qna-tooltip {
+    position: absolute;
+    bottom: clamp(50px, 8vh, 80px);
+    right: clamp(-20px, -3vw, -30px);
+    background: url('/static/icons/bubble.png') no-repeat center center;
+    background-size: contain;
+    background-color: transparent;
+    color: #ffb3d9;
+    padding: clamp(12px, 2vw, 20px) clamp(18px, 3vw, 28px) clamp(10px, 1.5vw, 16px);
+    border-radius: 0;
+    font-size: clamp(10px, 2vw, 12px); /* 响应式字体 */
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: none;
+    animation: tooltipBounce 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: clamp(40px, 6vh, 50px);
+    min-width: clamp(120px, 18vw, 150px);
+  }
+
+  .kiana-tooltip {
+    position: absolute;
+    bottom: clamp(50px, 8vh, 80px);
+    left: clamp(-20px, -3vw, -30px);
+    background: url('/static/icons/bubble.png') no-repeat center center;
+    background-size: contain;
+    background-color: transparent;
+    color: #ffb3d9;
+    padding: clamp(12px, 2vw, 20px) clamp(18px, 3vw, 28px) clamp(10px, 1.5vw, 16px);
+    border-radius: 0;
+    font-size: clamp(10px, 2vw, 12px); /* 响应式字体 */
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: none;
+    animation: tooltipBounce 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: clamp(40px, 6vh, 50px);
+    min-width: clamp(120px, 18vw, 150px);
+  }
+
+  .qna-tooltip::after,
+  .kiana-tooltip::after {
+    display: none;
+  }
+
+  /* 卡片内文字适配 - 响应式字体 */
+  .corner-card .card-footer,
+  .center-card .card-footer {
+    padding: clamp(0.06rem, 0.8vw, 0.08rem) clamp(0.08rem, 1.2vw, 0.12rem);
+    font-size: clamp(0.09rem, 1.8vw, 0.11rem); /* 响应式字体 */
+  }
+
+  .corner-card .card-footer-icon,
+  .center-card .card-footer-icon {
+    width: clamp(0.16rem, 2.5vw, 0.2rem);
+    height: clamp(0.16rem, 2.5vw, 0.2rem);
+  }
+
+  .corner-card .item-title,
+  .center-card .item-title {
+    font-size: clamp(0.09rem, 1.8vw, 0.11rem); /* 响应式字体 */
+  }
+
+  .corner-card .item-heat,
+  .center-card .item-heat {
+    font-size: clamp(0.07rem, 1.5vw, 0.09rem); /* 响应式字体 */
+  }
+
+  .corner-card .item-rank,
+  .center-card .item-rank {
+    width: clamp(0.26rem, 4vw, 0.32rem);
+    height: clamp(0.26rem, 4vw, 0.32rem);
+    font-size: clamp(0.11rem, 2vw, 0.13rem); /* 响应式字体 */
+  }
+
+  .corner-card .item-rank-container,
+  .center-card .item-rank-container {
+    width: clamp(0.3rem, 4.5vw, 0.36rem);
+    height: clamp(0.3rem, 4.5vw, 0.36rem);
+  }
+
+  .corner-card .item-rank-icon.rank-1st,
+  .center-card .item-rank-icon.rank-1st {
+    width: clamp(0.26rem, 4vw, 0.32rem);
+    height: clamp(0.26rem, 4vw, 0.32rem);
+  }
+
+  .corner-card .item-rank-icon.rank-2nd,
+  .center-card .item-rank-icon.rank-2nd {
+    width: clamp(0.24rem, 3.8vw, 0.3rem);
+    height: clamp(0.24rem, 3.8vw, 0.3rem);
+  }
+
+  .corner-card .item-rank-icon.rank-3rd,
+  .center-card .item-rank-icon.rank-3rd {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-65%, -50%);
+    width: clamp(0.22rem, 3.5vw, 0.28rem);
+    height: clamp(0.22rem, 3.5vw, 0.28rem);
   }
 }
 
 /* AI提问悬浮按钮容器 */
 .qna-fab-container {
   position: fixed;
-  bottom: 100px;
+  bottom: 120px;
   right: 32px;
   z-index: 1000;
   cursor: move;
@@ -920,15 +1615,15 @@ onBeforeUnmount(() => {
 /* 提示气泡 */
 .qna-tooltip {
   position: absolute;
-  bottom: 76px;
-  right: 0;
+  bottom: 80px;
+  right: -30px;
   background: url('/static/icons/bubble.png') no-repeat center center;
   background-size: contain;
   background-color: transparent;
   color: #ffb3d9;
   padding: 20px 28px 16px;
   border-radius: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   box-shadow: none;
@@ -944,6 +1639,10 @@ onBeforeUnmount(() => {
 
 .qna-tooltip::after {
   display: none;
+  top: 100%;
+  right: 20px;
+  border: 6px solid transparent;
+  border-top-color: rgba(37, 99, 235, 0.95);
 }
 
 @keyframes tooltipBounce {
@@ -978,7 +1677,7 @@ onBeforeUnmount(() => {
 /* Kiana按钮容器 */
 .kiana-fab-container {
   position: fixed;
-  bottom: 100px;
+  bottom: 120px;
   left: 32px;
   z-index: 1000;
   cursor: move;
@@ -1018,15 +1717,15 @@ onBeforeUnmount(() => {
 /* Kiana提示气泡 */
 .kiana-tooltip {
   position: absolute;
-  bottom: 76px;
-  left: 0;
+  bottom: 80px;
+  left: -30px;
   background: url('/static/icons/bubble.png') no-repeat center center;
   background-size: contain;
   background-color: transparent;
   color: #ffb3d9;
   padding: 20px 28px 16px;
   border-radius: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   box-shadow: none;

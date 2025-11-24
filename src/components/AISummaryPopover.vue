@@ -395,17 +395,17 @@ watch(
 
 @media (max-width: 768px) {
   .popover-wrapper {
-    padding: 10px;
+    padding: 0.1rem;
   }
 
   .popover-container {
     max-width: 100%;
     max-height: 90vh;
-    border-radius: 16px;
+    border-radius: 0.16rem;
   }
 
   .popover-content {
-    padding: 16px;
+    padding: 0.16rem;
   }
 }
 </style>

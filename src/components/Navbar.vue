@@ -1,7 +1,14 @@
 <template>
   <nav class="navbar">
     <div class="navbar-container">
-      <div class="navbar-menu">
+      <button 
+        v-if="isMobile" 
+        class="nav-scroll-btn nav-scroll-left" 
+        @click="scrollNavbar('left')"
+        aria-label="向左滚动"
+      >
+      </button>
+      <div class="navbar-menu" ref="navbarMenu">
         <router-link
           v-for="item in leftNavItems"
           :key="item.path"
@@ -42,16 +49,81 @@
           <span class="nav-text" :data-label="item.label">{{ item.label }}</span>
         </router-link>
       </div>
+      <button 
+        v-if="isMobile" 
+        class="nav-scroll-btn nav-scroll-right" 
+        @click="scrollNavbar('right')"
+        aria-label="向右滚动"
+      >
+      </button>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const isHomePage = computed(() => route.path === '/')
+const navbarMenu = ref<HTMLElement | null>(null)
+const isMobile = ref(false)
+
+const checkMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+
+const scrollNavbar = (direction: 'left' | 'right') => {
+  if (!navbarMenu.value) return
+  const scrollAmount = 200
+  const currentScroll = navbarMenu.value.scrollLeft
+  const targetScroll = direction === 'left' 
+    ? currentScroll - scrollAmount 
+    : currentScroll + scrollAmount
+  navbarMenu.value.scrollTo({
+    left: targetScroll,
+    behavior: 'smooth'
+  })
+}
+
+const scrollToActiveItem = () => {
+  if (!navbarMenu.value || !isMobile.value) return
+  const activeItem = navbarMenu.value.querySelector('.is-active') as HTMLElement
+  if (activeItem) {
+    const menuRect = navbarMenu.value.getBoundingClientRect()
+    const itemRect = activeItem.getBoundingClientRect()
+    const scrollLeft = navbarMenu.value.scrollLeft
+    const itemLeft = itemRect.left - menuRect.left + scrollLeft
+    const itemCenter = itemLeft - (menuRect.width / 2) + (itemRect.width / 2)
+    navbarMenu.value.scrollTo({
+      left: itemCenter,
+      behavior: 'smooth'
+    })
+  }
+}
+
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+  // 使用nextTick确保DOM已渲染
+  nextTick(() => {
+    const menuElement = document.querySelector('.navbar-menu') as HTMLElement
+    if (menuElement) {
+      navbarMenu.value = menuElement
+      // 路由变化时自动滚动到激活项
+      scrollToActiveItem()
+    }
+  })
+})
+
+// 监听路由变化
+watch(() => route.path, () => {
+  if (isMobile.value) {
+    nextTick(() => {
+      scrollToActiveItem()
+    })
+  }
+})
 
 type NavItem = {
   label: string
@@ -259,32 +331,98 @@ const navItemClasses = (item: NavItem) => ({
 }
 
 @media (max-width: 768px) {
+  .navbar {
+    position: relative;
+  }
+
   .navbar-container {
-    padding: 0 16px;
+    padding: 0 0.3rem;
+    position: relative;
+  }
+
+  .nav-scroll-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.5rem;
+    height: 0.5rem;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1001;
+    transition: all 0.3s ease;
+    box-shadow: none;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .nav-scroll-btn::before {
+    content: '';
+    width: 0.3rem;
+    height: 0.3rem;
+    background-image: url('/static/icons/main.png');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  /* 左边按钮水平翻转，不倒立 */
+  .nav-scroll-left::before {
+    transform: scaleX(-1);
+  }
+
+  .nav-scroll-btn:hover {
+    transform: translateY(-50%) scale(1.1);
+  }
+
+  .nav-scroll-btn:active {
+    transform: translateY(-50%) scale(0.95);
+  }
+
+  .nav-scroll-left {
+    left: 0.1rem;
+  }
+
+  .nav-scroll-right {
+    right: 0.1rem;
   }
 
   .navbar-menu {
-    gap: 2px;
+    gap: 0.02rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0 0.3rem;
+  }
+
+  .navbar-menu::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-item {
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: 0.08rem 0.12rem;
+    font-size: 0.16rem;
+    min-height: 0.44rem;
   }
 
   .nav-item::after {
-    width: 36px;
-    height: 36px;
+    width: 0.44rem;
+    height: 0.44rem;
   }
 
   .nav-item-main {
-    font-size: 13px;
-    padding: 6px 12px;
+    font-size: 0.16rem;
+    padding: 0.08rem 0.12rem;
+    min-height: 0.44rem;
   }
 
   .nav-logo-img {
-    width: 42px;
-    height: 42px;
+    width: 0.44rem;
+    height: 0.44rem;
   }
 }
 </style>

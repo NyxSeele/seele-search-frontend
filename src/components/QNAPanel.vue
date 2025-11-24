@@ -986,24 +986,56 @@ const handleSearchSuggestion = (suggestion: string) => {
 }
 
 .loading-gif {
-  width: 60px;
-  height: 60px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
+}
+
+.loading-state p {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4b3829;
+}
+
+.error-state p {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4b3829;
 }
 
 .retry-btn {
   padding: 8px 20px;
-  background: #667eea;
-  color: #fff;
-  border: none;
+  background: rgba(75, 56, 41, 0.15);
+  color: #4b3829;
+  border: 1px solid rgba(75, 56, 41, 0.3);
   border-radius: 16px;
   cursor: pointer;
   transition: all 0.3s ease;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .retry-btn:hover {
-  background: #5568d3;
+  background: rgba(75, 56, 41, 0.25);
   transform: translateY(-2px);
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .error-state p {
+    font-size: 0.14rem;
+  }
+
+  .retry-btn {
+    font-size: 0.12rem;
+    padding: 0.08rem 0.16rem;
+    background: rgba(75, 56, 41, 0.12);
+    border: 1px solid rgba(75, 56, 41, 0.25);
+  }
+
+  .retry-btn:hover {
+    background: rgba(75, 56, 41, 0.2);
+  }
 }
 
 .answer-content {
@@ -1078,8 +1110,11 @@ const handleSearchSuggestion = (suggestion: string) => {
 
 .input-area {
   border-top: none;
-  padding: 20px;
+  padding: 20px 0;
   background: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
 }
 
 .platform-filter {
@@ -1087,6 +1122,7 @@ const handleSearchSuggestion = (suggestion: string) => {
   gap: 8px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  padding: 0 20px; /* 和搜索框对齐 */
 }
 
 .filter-btn {
@@ -1094,7 +1130,7 @@ const handleSearchSuggestion = (suggestion: string) => {
   background: transparent !important;
   border: none;
   border-radius: 50%;
-  font-size: 12px;
+  font-size: 13px;
   color: #ffffff;
   font-weight: 600;
   cursor: pointer;
@@ -1165,6 +1201,9 @@ const handleSearchSuggestion = (suggestion: string) => {
   align-items: center;
   justify-content: center;
   position: relative;
+  width: 100%;
+  padding: 0 20px;
+  box-sizing: border-box;
 }
 
 .question-input {
@@ -1175,13 +1214,18 @@ const handleSearchSuggestion = (suggestion: string) => {
   font-size: 15px;
   outline: none;
   transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.9);
+  background: url('/static/icons/long banner.png') no-repeat center center;
+  background-size: 100% 100%;
+  background-color: transparent;
   color: #4b3829;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  margin: 0;
+  width: 100%;
+  min-height: 44px;
 }
 
 .question-input:focus {
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0.16rem 0.36rem rgba(0, 0, 0, 0.2);
 }
 
 .question-input:disabled {
@@ -1210,12 +1254,13 @@ const handleSearchSuggestion = (suggestion: string) => {
 }
 
 .suggestion-item {
-  padding: 10px 16px;
+  padding: 12px 16px;
   cursor: pointer;
   transition: all 0.2s ease;
   border-bottom: 1px solid #f0f0f0;
   font-size: 15px;
   color: #333;
+  min-height: 44px;
 }
 
 .suggestion-item:last-child {
@@ -1230,6 +1275,8 @@ const handleSearchSuggestion = (suggestion: string) => {
 .voice-btn {
   width: 50px;
   height: 50px;
+  min-width: 44px;
+  min-height: 44px;
   border: none;
   background: url('/static/icons/circular bubble.png') no-repeat center center;
   background-size: 100% 100%;
@@ -1482,6 +1529,8 @@ const handleSearchSuggestion = (suggestion: string) => {
   transition: all 0.3s ease;
   width: 50px;
   height: 50px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1600,9 +1649,158 @@ const handleSearchSuggestion = (suggestion: string) => {
 
 @media (max-width: 768px) {
   .qna-panel {
-    width: 100%;
-    max-height: 100vh;
-    border-radius: 0;
+    width: 90vw;
+    max-width: 90vw;
+    max-height: 85vh;
+    border-radius: clamp(0.16rem, 2vw, 0.2rem);
+  }
+
+  .panel-header {
+    padding: clamp(0.1rem, 1.5vw, 0.12rem) clamp(0.12rem, 2vw, 0.16rem);
+  }
+
+  .header-icon {
+    width: clamp(0.5rem, 8vw, 0.64rem);
+    height: clamp(0.5rem, 8vw, 0.64rem);
+  }
+
+  .chat-container {
+    padding: clamp(0.12rem, 2vw, 0.16rem);
+  }
+
+  .input-area {
+    padding: clamp(0.12rem, 2vw, 0.16rem) 0;
+    padding-bottom: calc(clamp(0.12rem, 2vw, 0.16rem) + env(safe-area-inset-bottom));
+  }
+
+  .platform-filter {
+    gap: clamp(0.06rem, 1vw, 0.08rem);
+    margin-bottom: clamp(0.12rem, 2vw, 0.16rem);
+  }
+
+  .input-wrapper {
+    padding: 0 clamp(0.12rem, 2vw, 0.16rem);
+    gap: clamp(0.06rem, 1vw, 0.08rem);
+  }
+
+  .question-input {
+    font-size: clamp(0.13rem, 2.5vw, 0.16rem);
+    padding: clamp(0.1rem, 1.5vw, 0.12rem) clamp(0.12rem, 2vw, 0.16rem);
+    min-height: clamp(0.4rem, 5.5vw, 0.44rem);
+    border-radius: clamp(0.2rem, 3vw, 0.24rem);
+  }
+
+  .filter-btn {
+    min-width: clamp(0.44rem, 6vw, 0.5rem);
+    min-height: clamp(0.44rem, 6vw, 0.5rem);
+    font-size: clamp(0.12rem, 2vw, 0.14rem);
+    padding: clamp(0.05rem, 0.8vw, 0.06rem);
+  }
+
+  .filter-btn.active {
+    font-size: clamp(0.11rem, 1.8vw, 0.13rem);
+  }
+
+  .voice-btn,
+  .send-btn {
+    width: clamp(0.4rem, 5.5vw, 0.44rem);
+    height: clamp(0.4rem, 5.5vw, 0.44rem);
+    min-width: clamp(0.4rem, 5.5vw, 0.44rem);
+    min-height: clamp(0.4rem, 5.5vw, 0.44rem);
+  }
+
+  .send-btn {
+    font-size: clamp(0.16rem, 2.5vw, 0.18rem);
+  }
+
+  .voice-icon {
+    width: clamp(16px, 2.5vw, 20px);
+    height: clamp(16px, 2.5vw, 20px);
+  }
+
+  .example-btn {
+    padding: clamp(0.1rem, 1.5vw, 0.12rem) clamp(0.16rem, 2.5vw, 0.2rem);
+    font-size: clamp(0.12rem, 2vw, 0.13rem);
+    margin: clamp(0.06rem, 1vw, 0.08rem);
+    min-height: clamp(0.44rem, 6vw, 0.56rem);
+  }
+
+  .message {
+    gap: clamp(0.08rem, 1.3vw, 0.1rem);
+  }
+
+  .message-avatar {
+    width: clamp(0.36rem, 5vw, 0.4rem);
+    height: clamp(0.36rem, 5vw, 0.4rem);
+  }
+
+  .message-content {
+    padding: clamp(0.12rem, 2vw, 0.16rem);
+    border-radius: clamp(0.12rem, 2vw, 0.16rem);
+  }
+
+  .message-text {
+    font-size: clamp(0.12rem, 2.2vw, 0.14rem);
+    line-height: 1.5;
+  }
+
+  .message-meta {
+    font-size: clamp(0.1rem, 1.8vw, 0.11rem);
+    margin-top: clamp(0.05rem, 0.8vw, 0.06rem);
+  }
+
+  .panel-close {
+    width: clamp(0.28rem, 4vw, 0.32rem);
+    height: clamp(0.28rem, 4vw, 0.32rem);
+    font-size: clamp(0.16rem, 2.5vw, 0.18rem);
+  }
+
+  .loading-gif {
+    width: clamp(0.7rem, 10vw, 0.8rem);
+    height: clamp(0.7rem, 10vw, 0.8rem);
+    margin-bottom: clamp(0.12rem, 2vw, 0.16rem);
+  }
+
+  .loading-state p {
+    font-size: clamp(0.12rem, 2.2vw, 0.14rem);
+    font-weight: 600;
+    color: #4b3829;
+  }
+
+  .related-title {
+    font-size: clamp(0.12rem, 2vw, 0.14rem);
+    margin-bottom: clamp(0.08rem, 1.5vw, 0.12rem);
+  }
+
+  .related-item {
+    padding: clamp(0.08rem, 1.3vw, 0.1rem) clamp(0.1rem, 1.5vw, 0.12rem);
+    gap: clamp(0.1rem, 1.5vw, 0.12rem);
+  }
+
+  .related-platform-icon {
+    width: clamp(0.24rem, 3.5vw, 0.28rem);
+    height: clamp(0.24rem, 3.5vw, 0.28rem);
+  }
+
+  .related-title-text {
+    font-size: clamp(0.11rem, 2vw, 0.13rem);
+  }
+
+  .suggestions-dropdown {
+    border-radius: clamp(0.1rem, 1.5vw, 0.12rem) clamp(0.1rem, 1.5vw, 0.12rem) 0 0;
+    max-height: clamp(1.6rem, 25vw, 2rem);
+    margin-bottom: clamp(0.06rem, 1vw, 0.08rem);
+  }
+
+  .suggestion-item {
+    padding: clamp(0.1rem, 1.5vw, 0.12rem) clamp(0.12rem, 2vw, 0.16rem);
+    font-size: clamp(0.13rem, 2.5vw, 0.16rem);
+    min-height: clamp(0.4rem, 5.5vw, 0.44rem);
+  }
+
+  .qna-panel {
+    max-width: 95vw;
+    max-height: 90vh;
   }
 
   @keyframes panelScaleIn {

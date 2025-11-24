@@ -7,17 +7,22 @@ const isLoading = ref(true)
 onMounted(() => {
   // 等待页面资源加载完成
   const checkLoadComplete = () => {
-    if (document.readyState === 'complete') {
-      // 额外等待一小段时间确保所有资源都已加载
-      setTimeout(() => {
-        isLoading.value = false
-      }, 800)
-    } else {
-      window.addEventListener('load', () => {
+    try {
+      if (document.readyState === 'complete') {
+        // 额外等待一小段时间确保所有资源都已加载
         setTimeout(() => {
           isLoading.value = false
         }, 800)
-      })
+      } else {
+        window.addEventListener('load', () => {
+          setTimeout(() => {
+            isLoading.value = false
+          }, 800)
+        })
+      }
+    } catch (error) {
+      console.error('加载检查失败:', error)
+      isLoading.value = false
     }
   }
   
@@ -55,6 +60,10 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
+html {
+  font-size: 100px; /* 默认基准值，移动端会动态调整 */
+}
+
 html,
 body,
 #app {
@@ -70,6 +79,45 @@ body,
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* CSS变量 - REM适配系统 */
+:root {
+  --design-base: 414px;
+  --rem-base: 100px;
+  --spacing-xs: 0.08rem;   /* 8px */
+  --spacing-sm: 0.16rem;   /* 16px */
+  --spacing-md: 0.24rem;   /* 24px */
+  --spacing-lg: 0.32rem;   /* 32px */
+  --spacing-xl: 0.4rem;    /* 40px */
+}
+
+/* 大屏手机适配 (414px以上) */
+@media screen and (min-width: 415px) {
+  html {
+    font-size: 100px;
+  }
+}
+
+/* 中等屏幕 (393-414px) - 小米14/华为Mate等 */
+@media screen and (max-width: 414px) and (min-width: 393px) {
+  html {
+    font-size: 95px; /* 轻微缩放 */
+  }
+}
+
+/* 小屏适配 (360-392px) - 中端机型 */
+@media screen and (max-width: 392px) and (min-width: 360px) {
+  html {
+    font-size: 87px;
+  }
+}
+
+/* 超小屏 (320-359px) - 老旧机型 */
+@media screen and (max-width: 359px) {
+  html {
+    font-size: 77px;
+  }
 }
 
 .app-shell {

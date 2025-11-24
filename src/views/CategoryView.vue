@@ -46,7 +46,12 @@
           <p v-if="aiError" class="ai-error-text">{{ aiError }}</p>
         </div>
         <div class="ranking-section">
+          <div v-if="!loading && items.length === 0" class="empty-state">
+            <img src="/static/icons/dashboard.png" alt="暂无数据" class="empty-icon" />
+            <p class="empty-text">暂无数据</p>
+          </div>
           <RankingList
+            v-else
             :items="items"
             :loading="loading"
             :error="error"
@@ -73,6 +78,7 @@
       class="qna-fab-container"
       :style="{ transform: `translate(${qnaFabPosition.x}px, ${qnaFabPosition.y}px)` }"
       @mousedown="handleQnaMouseDown"
+      @touchstart="handleQnaTouchStart"
       @mouseenter="handleQnaMouseEnter"
     >
       <button class="qna-fab" @click="handleQnaClick" title="AI智能问答">
@@ -88,6 +94,7 @@
       class="kiana-fab-container"
       :style="{ transform: `translate(${kianaFabPosition.x}px, ${kianaFabPosition.y}px)` }"
       @mousedown="handleKianaMouseDown"
+      @touchstart="handleKianaTouchStart"
       @mouseenter="handleKianaMouseEnter"
     >
       <button class="kiana-fab" @click="handleKianaClick" title="崩坏3最新公告">
@@ -129,6 +136,7 @@ import hotSearchApi from '@/api/hotSearch'
 import Footer from '@/components/Footer.vue'
 import { CATEGORIES } from '@/constants/categories'
 import type { HotSearchItem } from '@/types'
+import { Platform } from '@/types'
 import aiApi from '@/api/ai'
 import { sortByAggregateScore } from '@/utils/aggregateRanking'
 import { pushSummaryToQnaPanel, startSummaryStream } from '@/utils/qnaSummary'
@@ -262,6 +270,98 @@ const handleKianaMouseUp = () => {
   document.removeEventListener('mouseup', handleKianaMouseUp)
 }
 
+// Touch事件处理 - QNA
+const handleQnaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isDragging.value = true
+  hasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  dragStart.value = {
+    x: touch.clientX - qnaFabPosition.value.x,
+    y: touch.clientY - qnaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleQnaTouchMove)
+  document.addEventListener('touchend', handleQnaTouchEnd)
+}
+
+const handleQnaTouchMove = (e: TouchEvent) => {
+  if (!isDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - dragStart.value.x,
+    y: touch.clientY - dragStart.value.y,
+  }
+  const deltaX = nextPosition.x - qnaFabPosition.value.x
+  const deltaY = nextPosition.y - qnaFabPosition.value.y
+  if (!hasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      hasDragged.value = true
+    }
+  }
+  if (hasDragged.value) {
+    qnaFabPosition.value = nextPosition
+  }
+}
+
+const handleQnaTouchEnd = (e: TouchEvent) => {
+  isDragging.value = false
+  document.removeEventListener('touchmove', handleQnaTouchMove)
+  document.removeEventListener('touchend', handleQnaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!hasDragged.value) {
+    handleQnaClick()
+  }
+}
+
+// Touch事件处理 - Kiana
+const handleKianaTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  isKianaDragging.value = true
+  kianaHasDragged.value = false
+  const touch = e.touches[0]
+  if (!touch) return
+  kianaDragStart.value = {
+    x: touch.clientX - kianaFabPosition.value.x,
+    y: touch.clientY - kianaFabPosition.value.y,
+  }
+  document.addEventListener('touchmove', handleKianaTouchMove)
+  document.addEventListener('touchend', handleKianaTouchEnd)
+}
+
+const handleKianaTouchMove = (e: TouchEvent) => {
+  if (!isKianaDragging.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const nextPosition = {
+    x: touch.clientX - kianaDragStart.value.x,
+    y: touch.clientY - kianaDragStart.value.y,
+  }
+  const deltaX = nextPosition.x - kianaFabPosition.value.x
+  const deltaY = nextPosition.y - kianaFabPosition.value.y
+  if (!kianaHasDragged.value) {
+    const movedEnough = Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD
+    if (movedEnough) {
+      kianaHasDragged.value = true
+    }
+  }
+  if (kianaHasDragged.value) {
+    kianaFabPosition.value = nextPosition
+  }
+}
+
+const handleKianaTouchEnd = (e: TouchEvent) => {
+  isKianaDragging.value = false
+  document.removeEventListener('touchmove', handleKianaTouchMove)
+  document.removeEventListener('touchend', handleKianaTouchEnd)
+  // 如果没有拖动，触发点击
+  if (!kianaHasDragged.value) {
+    handleKianaClick()
+  }
+}
+
 const handleKianaClick = async () => {
   if (kianaHasDragged.value) {
     kianaHasDragged.value = false
@@ -279,6 +379,7 @@ const handleKianaClick = async () => {
 const loadHonkaiData = async () => {
   honkaiLoading.value = true
   honkaiError.value = ''
+
   try {
     const response = await hotSearchApi.getHonkaiHotSearch()
     honkaiItems.value = response.data || []
@@ -343,6 +444,7 @@ const loadData = async (silent = false) => {
     loading.value = true
   }
   error.value = ''
+
   try {
     // 使用英文category ID而不是中文categoryName
     const categoryId = route.meta.category as string
@@ -367,16 +469,18 @@ const loadData = async (silent = false) => {
         item.title &&
         item.title.trim().length > 0,
     )
-    // 使用聚合算法排序，考虑rank、热度、平台权重等综合因素
-    items.value = sortByAggregateScore(filtered)
-
-    // 更新时间
-    lastUpdateTime.value = new Date()
-    updateRefreshText()
-
-    console.log(
-      `✅ 加载${categoryId}分类数据成功，原始${response.length}条，去重后${uniqueItems.length}条，过滤后${filtered.length}条，已按热度排序`,
-    )
+    
+    // 只有在有有效数据时才更新
+    if (filtered.length > 0) {
+      // 使用聚合算法排序，考虑rank、热度、平台权重等综合因素
+      items.value = sortByAggregateScore(filtered)
+      // 更新时间
+      lastUpdateTime.value = new Date()
+      updateRefreshText()
+      console.log(
+        `✅ 加载${categoryId}分类数据成功，原始${response.length}条，去重后${uniqueItems.length}条，过滤后${filtered.length}条，已按热度排序`,
+      )
+    }
   } catch (err) {
     console.error('加载分类数据失败:', err)
     error.value = '加载失败，请稍后重试'
@@ -641,7 +745,7 @@ onBeforeUnmount(() => {
   background-position: center center;
   background-color: transparent !important;
   color: #ffffff;
-  min-height: 44px;
+  min-height: 40px;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -759,12 +863,34 @@ onBeforeUnmount(() => {
 
 .btn-text {
   letter-spacing: 0.5px;
-  font-size: 15px;
+  font-size: 12.9px;
   line-height: 1;
 }
 
 .ranking-section {
   min-height: 400px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 24px;
+}
+
+.empty-icon {
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+}
+
+.empty-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: #666;
+  margin: 0;
 }
 
 /* AI提问悬浮按钮容器 */
@@ -939,63 +1065,240 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .page-content {
-    padding: 24px 16px 80px;
+    padding: clamp(0.16rem, 2vw, 0.24rem) clamp(0.12rem, 1.5vw, 0.16rem) clamp(0.6rem, 5vw, 0.8rem);
+    width: 100vw;
+    max-width: 100%;
   }
 
   .page-header {
-    padding: 24px 20px;
-    margin-bottom: 24px;
+    padding: clamp(0.16rem, 2vw, 0.24rem) clamp(0.16rem, 2vw, 0.2rem);
+    margin-bottom: clamp(0.16rem, 2vw, 0.24rem);
   }
 
   .page-title {
-    font-size: 24px;
+    font-size: clamp(0.18rem, 4vw, 0.24rem); /* 响应式字体 */
   }
 
   .page-subtitle {
-    font-size: 14px;
+    font-size: clamp(0.12rem, 3vw, 0.16rem); /* 响应式字体 */
   }
 
   .ranking-header {
-    flex-direction: column;
-    align-items: stretch;
-    margin-bottom: 20px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: clamp(0.12rem, 1.5vw, 0.2rem);
+    gap: clamp(0.06rem, 1vw, 0.08rem);
   }
 
   .refresh-info {
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex: 1;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 0.08rem;
   }
 
   .last-update,
   .next-refresh {
-    font-size: 11px;
-    padding: 4px 10px;
+    font-size: clamp(0.08rem, 2vw, 0.1rem); /* 响应式字体 */
+    padding: clamp(0.04rem, 0.5vw, 0.05rem) clamp(0.08rem, 1vw, 0.1rem);
+    min-height: clamp(0.24rem, 3vw, 0.28rem);
+    white-space: nowrap;
   }
 
   .action-buttons {
-    justify-content: center;
+    justify-content: flex-end;
+    gap: 0.06rem;
+    flex-shrink: 0;
   }
 
-  .refresh-btn,
+  .refresh-btn {
+    padding: clamp(0.02rem, 0.3vw, 0.04rem); /* 增大触摸判定区域 */
+    font-size: 0;
+    min-height: clamp(0.24rem, 3vw, 0.28rem);
+    min-width: clamp(0.24rem, 3vw, 0.28rem);
+    width: clamp(0.24rem, 3vw, 0.28rem);
+    height: clamp(0.24rem, 3vw, 0.28rem);
+    background-size: 100% 100%;
+  }
+
+  .refresh-btn .refresh-icon {
+    font-size: clamp(0.14rem, 2.5vw, 0.18rem); /* 响应式字体 */
+  }
+
+  .refresh-btn .refresh-text {
+    display: none;
+  }
+
   .ai-summary-btn {
-    padding: 10px 20px;
-    font-size: 13px;
+    padding: clamp(0.02rem, 0.3vw, 0.04rem); /* 增大触摸判定区域 */
+    font-size: 0;
+    width: clamp(0.28rem, 3.5vw, 0.32rem);
+    height: clamp(0.28rem, 3.5vw, 0.32rem);
+    min-width: clamp(0.28rem, 3.5vw, 0.32rem);
+    min-height: clamp(0.28rem, 3.5vw, 0.32rem);
+    background-size: 100% 100%;
+  }
+
+  .ai-summary-btn .btn-icon {
+    width: clamp(0.2rem, 2.5vw, 0.24rem);
+    height: clamp(0.2rem, 2.5vw, 0.24rem);
+    background-size: clamp(0.2rem, 2.5vw, 0.24rem) clamp(0.2rem, 2.5vw, 0.24rem);
+  }
+
+  .refresh-btn .refresh-icon {
+    width: clamp(0.14rem, 2.5vw, 0.18rem);
+    height: clamp(0.14rem, 2.5vw, 0.18rem);
+    font-size: clamp(0.14rem, 2.5vw, 0.18rem);
+  }
+
+  .ai-summary-btn .btn-text {
+    display: none;
   }
 
   .btn-icon {
-    font-size: 16px;
+    font-size: clamp(0.08rem, 1.5vw, 0.1rem); /* 响应式字体 */
   }
 
-  .qna-fab {
-    width: 56px;
-    height: 56px;
-    bottom: 24px;
-    right: 24px;
+  .category-icon-wrapper {
+    margin: clamp(-0.1rem, -1vw, -0.15rem) 0 clamp(0.1rem, 1.5vw, 0.2rem) 0; /* 减小间距 */
   }
 
-  .fab-icon {
-    font-size: 28px;
+  .category-icon {
+    width: clamp(0.8rem, 12vw, 1rem);
+    height: clamp(0.8rem, 12vw, 1rem);
+  }
+
+  .ranking-wrapper {
+    margin-top: clamp(0.1rem, 1vw, 0.2rem); /* 减小间距 */
+  }
+
+  .empty-icon {
+    width: clamp(1rem, 15vw, 1.2rem);
+    height: clamp(1rem, 15vw, 1.2rem);
+  }
+
+  .empty-text {
+    font-size: clamp(0.14rem, 3vw, 0.18rem); /* 响应式字体 */
+  }
+
+  /* QNA和Kiana按钮样式 - 完全响应式 */
+  .qna-fab-container {
+    position: fixed;
+    bottom: clamp(40px, 6vh, 60px);
+    right: clamp(20px, 3vw, 32px);
+    z-index: 1000;
+    cursor: move;
+    user-select: none;
+    min-width: clamp(60px, 9vw, 90px); /* 增大触摸判定区域 */
+    min-height: clamp(60px, 9vw, 90px);
+    padding: clamp(4px, 0.5vw, 8px);
+  }
+
+  .kiana-fab-container {
+    position: fixed;
+    bottom: clamp(40px, 6vh, 60px);
+    left: clamp(20px, 3vw, 32px);
+    z-index: 1000;
+    cursor: move;
+    user-select: none;
+    min-width: clamp(60px, 9vw, 90px); /* 增大触摸判定区域 */
+    min-height: clamp(60px, 9vw, 90px);
+    padding: clamp(4px, 0.5vw, 8px);
+  }
+
+  .qna-fab,
+  .kiana-fab {
+    width: clamp(60px, 9vw, 90px);
+    height: clamp(60px, 9vw, 90px);
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .qna-fab:hover,
+  .kiana-fab:hover {
+    transform: translateY(-4px) scale(1.1);
+    box-shadow: none;
+  }
+
+  .qna-fab:active,
+  .kiana-fab:active {
+    transform: translateY(-2px) scale(1.02);
+  }
+
+  .qna-fab:hover + .qna-tooltip,
+  .kiana-fab:hover + .kiana-tooltip {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .qna-fab .fab-icon-img,
+  .kiana-fab .fab-icon-img {
+    width: clamp(54px, 8vw, 82px);
+    height: clamp(54px, 8vw, 82px);
+    animation: pulse 2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .qna-tooltip {
+    position: absolute;
+    bottom: clamp(50px, 8vh, 80px);
+    right: clamp(-20px, -3vw, -30px);
+    background: url('/static/icons/bubble.png') no-repeat center center;
+    background-size: contain;
+    background-color: transparent;
+    color: #ffb3d9;
+    padding: clamp(12px, 2vw, 20px) clamp(18px, 3vw, 28px) clamp(10px, 1.5vw, 16px);
+    border-radius: 0;
+    font-size: clamp(10px, 2vw, 12px); /* 响应式字体 */
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: none;
+    animation: tooltipBounce 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: clamp(40px, 6vh, 50px);
+    min-width: clamp(120px, 18vw, 150px);
+  }
+
+  .kiana-tooltip {
+    position: absolute;
+    bottom: clamp(50px, 8vh, 80px);
+    left: clamp(-20px, -3vw, -30px);
+    background: url('/static/icons/bubble.png') no-repeat center center;
+    background-size: contain;
+    background-color: transparent;
+    color: #ffb3d9;
+    padding: clamp(12px, 2vw, 20px) clamp(18px, 3vw, 28px) clamp(10px, 1.5vw, 16px);
+    border-radius: 0;
+    font-size: clamp(10px, 2vw, 12px); /* 响应式字体 */
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: none;
+    animation: tooltipBounce 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: clamp(40px, 6vh, 50px);
+    min-width: clamp(120px, 18vw, 150px);
+  }
+
+  .qna-tooltip::after,
+  .kiana-tooltip::after {
+    display: none;
   }
 }
 </style>

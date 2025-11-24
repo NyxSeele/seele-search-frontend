@@ -490,10 +490,11 @@ const handleClose = () => {
     max-width: 100%;
     max-height: 100vh;
     border-radius: 0;
+    padding: 0.16rem;
   }
 
   .modal-content {
-    padding: 20px;
+    padding: 0.2rem;
   }
 
   .topics-grid {
